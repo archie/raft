@@ -130,8 +130,9 @@ class FollowerSpec extends RaftSpec {
     "convert to candidate if timeout reached" in {
       follower.setState(Follower, Data(2, None, List(), 1, 1))
       follower.setTimer("timeout", Timeout, 200 millis, false)
+      Thread.sleep(150)
       follower ! RequestVote(1, candidateId, 2, 2) // follower denies this
-      Thread.sleep(250) // ensures first timeout has expired 
+      Thread.sleep(100) // ensures first timeout has expired 
       follower.stateName must be (Candidate) // timeout happened,
       																			 // transition to candidate
     }
