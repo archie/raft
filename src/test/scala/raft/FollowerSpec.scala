@@ -1,7 +1,9 @@
 package raft
 
+import scala.language.postfixOps
 import org.scalatest._
 import akka.testkit._
+import scala.concurrent.duration._
 
 class FollowerSpec extends RaftSpec {
 	
@@ -11,9 +13,10 @@ class FollowerSpec extends RaftSpec {
   "a follower" must {
     "reply to AppendEntriesRPC" in {
       // check notes in paper before continuing 
+      pending
     }
     
-    "grant vote if sender term is higher to own term" in {
+    "grant vote if candidate term is higher to own term" in {
       follower.setState(Follower, Data(
           currentTerm = 2,
           votedFor = None,
@@ -23,6 +26,23 @@ class FollowerSpec extends RaftSpec {
           ))
       follower ! RequestVote(3, candidateId, 2, 2)
       expectMsg(GrantVote(2)) // should follower update term?
+    }
+    
+    "grant vote if candidate is exactly equal" in {
+    	follower.setState(Follower, Data(
+          currentTerm = 2,
+          votedFor = None,
+          log = List(LogEntry("a", 2), LogEntry("b", 2)),
+          commitIndex = 1,
+          lastApplied = 1
+          ))
+      follower ! RequestVote(
+          term = 2,
+          candidateId = candidateId,
+          lastLogIndex = 1,
+          lastLogTerm = 2
+          )
+      expectMsg(GrantVote(2))
     }
     
     "deny vote if own log's last term is more up to date than candidate" in {
@@ -91,24 +111,41 @@ class FollowerSpec extends RaftSpec {
       expectMsg(DenyVote(2))
     }
     
-    "convert to candidate if no AppendEntriesRPCs are received from the leader within timeout" in {
+    "convert to candidate if no AppendEntriesRPCs are received " +
+    "from the leader within timeout" in {
+      pending
+    }
+    
+    "stay as follower if granting a vote within timeout" in {
+      follower.setState(Follower, Data(2, None, List(), 1, 1))
+      follower.setTimer("timeout", Timeout, 200 millis, false)
+      Thread.sleep(150)
+      follower ! RequestVote(3, candidateId, 2, 2) // follower grants vote
+      Thread.sleep(100) // ensures first timeout has expired 
+      follower.stateName must be (Follower) // stays as follower
+      follower.isTimerActive("timeout") must be (true)
       
     }
     
-    "convert to candidate if no GrantVoteRPC is received within timeout" in {
-      
-    } 
+    "convert to candidate if timeout reached" in {
+      follower.setState(Follower, Data(2, None, List(), 1, 1))
+      follower.setTimer("timeout", Timeout, 200 millis, false)
+      follower ! RequestVote(1, candidateId, 2, 2) // follower denies this
+      Thread.sleep(250) // ensures first timeout has expired 
+      follower.stateName must be (Candidate) // timeout happened,
+      																			 // transition to candidate
+    }
     
     "reset timeout after receiving AppendEntriesRPC" in {
-      
+      pending
     }
     
-    "reset timeout after receiving GrantVoteRPC" in {
-      
+    "reset timeout after granting a vote" in {
+    	pending
     }
     
     "increase its term when transitioning to candidate" in {
-      
+      pending
     }
   }
 }
