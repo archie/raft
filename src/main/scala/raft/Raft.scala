@@ -40,8 +40,7 @@ class Raft() extends Actor with FSM[Role, Data] {
     case Event(rpc: RequestVote, data: Data) =>
       vote(rpc, data) match {
         case (msg: GrantVote, updData) =>
-          cancelTimer("timeout")
-          setTimer("timeout", Timeout, 200 millis, false) // reset timer
+          resetTimer
           stay using(updData) replying(msg) 
         case (msg: DenyVote, updData) =>
         	stay using(updData) replying(msg) // continue without resetting timer
@@ -61,6 +60,11 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
   
   initialize()
+  
+  private def resetTimer = {
+    cancelTimer("timeout")
+    setTimer("timeout", Timeout, 200 millis, false) // should pick random time
+  }
   
   /*
    * Determine whether to grant or deny vote
