@@ -116,7 +116,7 @@ class FollowerSpec extends RaftSpec {
       pending
     }
     
-    "stay as follower if granting a vote within timeout" in {
+    "reset timer when granting vote" in {
       follower.setState(Follower, Data(2, None, List(), 1, 1))
       follower.setTimer("timeout", Timeout, 200 millis, false)
       Thread.sleep(150)
@@ -138,10 +138,6 @@ class FollowerSpec extends RaftSpec {
     
     "reset timeout after receiving AppendEntriesRPC" in {
       pending
-    }
-    
-    "reset timeout after granting a vote" in {
-    	pending
     }
     
     "increase its term when transitioning to candidate" in {

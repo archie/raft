@@ -70,7 +70,7 @@ class Raft() extends Actor with FSM[Role, Data] {
 	  else if (rpc.term < data.currentTerm) deny(data)
 	  else if (rpc.term == data.currentTerm)
 	    if (candidateLogTermIsBehind(rpc, data)) deny(data)
-	    else if (candidateLogTermIsEqualButShorterLog(rpc, data)) deny(data)
+	    else if (candidateLogTermIsEqualButHasShorterLog(rpc, data)) deny(data)
 	    else grant(rpc, data) // follower and candidate are equal, grant
 	  else grant(rpc, data) // candidate is ahead, grant
   
@@ -83,7 +83,7 @@ class Raft() extends Actor with FSM[Role, Data] {
   private def candidateLogTermIsBehind(rpc: RequestVote, data: Data) = 
     data.log.last.term > rpc.lastLogTerm
   
-  private def candidateLogTermIsEqualButShorterLog(rpc: RequestVote, data: Data) =
+  private def candidateLogTermIsEqualButHasShorterLog(rpc: RequestVote, data: Data) =
     (data.log.last.term == rpc.lastLogTerm) && 
 	  (data.log.length-1 > rpc.lastLogIndex)
   
