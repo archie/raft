@@ -11,10 +11,50 @@ class FollowerSpec extends RaftSpec {
   val follower = TestFSMRef(new Raft())
   
   "a follower" must {
-    "reply false to AppendEntries if requester's term is less than current term" in {
+    "not append entries if requester's term is less than current term" in {
     	follower.setState(Follower, Data(2, None, List(), 1, 1))
     	follower ! AppendEntries(1, 1, 1, 1, List(LogEntry("op", 1)), 1)
     	expectMsg(AppendFailure(2))
+    }
+    
+    "not append entries if log doesn't contain an entry at " + 
+    "previous index" in {
+      follower.setState(Follower, Data(
+          currentTerm = 2,
+          votedFor = None,
+          log = List(LogEntry("a", 2), LogEntry("b", 2)),
+          commitIndex = 1,
+          lastApplied = 1
+          ))
+      follower ! AppendEntries(
+          term = 2,
+          leaderId = 1,
+          prevLogIndex = 3, // this is one step ahead of follower.log.length-1
+          prevLogTerm = 2,
+          entries = List(LogEntry("op", 2)),
+          leaderCommit = 0
+      		)
+      expectMsg(AppendFailure(2))
+    }
+    
+    "not append entries if log doesn't contain an entry at " + 
+    "previous index with matching terms" in {
+      follower.setState(Follower, Data(
+          currentTerm = 2,
+          votedFor = None,
+          log = List(LogEntry("a", 2), LogEntry("b", 2)),
+          commitIndex = 0,
+          lastApplied = 0
+          ))
+      follower ! AppendEntries(
+          term = 3,
+          leaderId = 1,
+          prevLogIndex = 1, // last position in follower log
+          prevLogTerm = 3,
+          entries = List(LogEntry("op", 3)),
+          leaderCommit = 0
+      		)
+      expectMsg(AppendFailure(2))
     }
     
     "grant vote if candidate term is higher to own term" in {

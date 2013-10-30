@@ -71,11 +71,36 @@ class Raft() extends Actor with FSM[Role, Data] {
   
   initialize()
   
+  /*
+   * AppendEntries handling 
+   */
   private def append(rpc: AppendEntries, data: Data): (AppendReply, Data) = { 
-    val msg = AppendFailure(data.currentTerm)
-    (msg, data)
+    if (leaderIsBehind(rpc, data)) appendFail(data)
+    else if (!hasMatchingLogEntryAtPrevPosition(rpc, data)) appendFail(data)
+    else appendSuccess(rpc, data)
   }
   
+  private def leaderIsBehind(rpc: AppendEntries, data: Data): Boolean = 
+    rpc.term < data.currentTerm
+    
+  private def hasMatchingLogEntryAtPrevPosition(
+      rpc: AppendEntries, data: Data): Boolean =
+    (data.log.isDefinedAt(rpc.prevLogIndex) && 
+    (data.log(rpc.prevLogIndex).term == rpc.prevLogTerm))
+  
+  private def appendFail(data: Data) =
+    (AppendFailure(data.currentTerm), data)
+   
+  private def appendSuccess(rpc: AppendEntries, data: Data) = {
+    // if newer entries exist in log these are not committed and can 
+    // safely be removed - should add check during exhaustive testing
+    // to ensure property holds
+    (AppendSuccess(data.currentTerm), data)
+  }
+  
+  /*
+   * Timer 
+   */
   private def resetTimer = {
     cancelTimer("timeout")
     setTimer("timeout", Timeout, 200 millis, false) // should pick random time
