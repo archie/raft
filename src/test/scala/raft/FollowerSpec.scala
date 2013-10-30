@@ -11,9 +11,10 @@ class FollowerSpec extends RaftSpec {
   val follower = TestFSMRef(new Raft())
   
   "a follower" must {
-    "reply to AppendEntriesRPC" in {
-      // check notes in paper before continuing 
-      pending
+    "reply false to AppendEntries if requester's term is less than current term" in {
+    	follower.setState(Follower, Data(2, None, List(), 1, 1))
+    	follower ! AppendEntries(1, 1, 1, 1, List(LogEntry("op", 1)), 1)
+    	expectMsg(AppendFailure(2))
     }
     
     "grant vote if candidate term is higher to own term" in {
@@ -138,6 +139,13 @@ class FollowerSpec extends RaftSpec {
     }
     
     "reset timeout after receiving AppendEntriesRPC" in {
+//      follower.setState(Follower, Data(2, None, List(), 1, 1))
+//      follower.setTimer("timeout", Timeout, 200 millis, false)
+//      Thread.sleep(150)
+//      follower ! AppendEntries() 
+//      Thread.sleep(100) // ensures first timeout has expired 
+//      follower.stateName must be (Follower) // stays as follower
+//      follower.isTimerActive("timeout") must be (true)
       pending
     }
     

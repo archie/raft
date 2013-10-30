@@ -16,11 +16,18 @@ case class LogEntry(entry: String, term: Raft.Term)
 sealed trait Message
 case class RequestVote(term: Raft.Term, candidateId: Raft.NodeId,
     lastLogIndex: Int, lastLogTerm: Raft.Term) extends Message
+case class AppendEntries(term: Raft.Term, leaderId: Raft.NodeId, 
+    prevLogIndex: Int, prevLogTerm: Raft.Term, entries: List[LogEntry],
+    leaderCommit: Int)
 case object Timeout extends Message
 
 sealed trait Vote
 case class DenyVote(term: Raft.Term) extends Vote
 case class GrantVote(term: Raft.Term) extends Vote
+
+sealed trait AppendReply
+case class AppendFailure(term: Raft.Term) extends AppendReply
+case class AppendSuccess(term: Raft.Term) extends AppendReply
 
 /* states */
 sealed trait Role
@@ -45,6 +52,9 @@ class Raft() extends Actor with FSM[Role, Data] {
         case (msg: DenyVote, updData) =>
         	stay using(updData) replying(msg) // continue without resetting timer
       }
+    case Event(rpc: AppendEntries, data: Data) =>
+      val (msg, upd) = append(rpc, data)
+      stay using upd replying msg
     case Event(Timeout, data) =>
       goto(Candidate) using data
   }
@@ -60,6 +70,11 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
   
   initialize()
+  
+  private def append(rpc: AppendEntries, data: Data): (AppendReply, Data) = { 
+    val msg = AppendFailure(data.currentTerm)
+    (msg, data)
+  }
   
   private def resetTimer = {
     cancelTimer("timeout")
