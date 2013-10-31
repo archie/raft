@@ -57,6 +57,68 @@ class FollowerSpec extends RaftSpec {
       expectMsg(AppendFailure(2))
     }
     
+    "remove uncommitted entries if appending at a position" +
+    "less than log length" in {
+    	follower.setState(Follower, Data(
+          currentTerm = 2,
+          votedFor = None,
+          log = List(LogEntry("a", 2), LogEntry("b", 2), LogEntry("remove", 2)),
+          commitIndex = 0,
+          lastApplied = 0
+          ))
+      follower ! AppendEntries(
+          term = 3,
+          leaderId = 1,
+          prevLogIndex = 1, // matches follower's entry ("b", 2)
+          prevLogTerm = 2, // matches follower's entry's term
+          entries = List(LogEntry("op", 3)),
+          leaderCommit = 0
+      		)
+      expectMsg(AppendSuccess(2))
+    	follower.stateData.log must not contain (LogEntry("remove", 2))
+    }
+    
+    "append entry if previous log index and term match" in {
+      follower.setState(Follower, Data(
+          currentTerm = 2,
+          votedFor = None,
+          log = List(LogEntry("a", 2), LogEntry("b", 2)),
+          commitIndex = 0,
+          lastApplied = 0
+          ))
+      follower ! AppendEntries(
+          term = 3,
+          leaderId = 1,
+          prevLogIndex = 1, // matches follower's last entry
+          prevLogTerm = 2, // matches follower's last entry's term
+          entries = List(LogEntry("op", 3)),
+          leaderCommit = 0
+      		)
+      expectMsg(AppendSuccess(2))
+      follower.stateData.log.last.entry must be ("op")
+    }
+    
+    "append multiple entries if previous log index and term match" in {
+      follower.setState(Follower, Data(
+          currentTerm = 2,
+          votedFor = None,
+          log = List(LogEntry("a", 2), LogEntry("b", 2)),
+          commitIndex = 0,
+          lastApplied = 0
+          ))
+      follower ! AppendEntries(
+          term = 3,
+          leaderId = 1,
+          prevLogIndex = 1, // matches follower's last entry
+          prevLogTerm = 2, // matches follower's last entry's term
+          entries = List(LogEntry("op", 3), LogEntry("op2", 3)),
+          leaderCommit = 0
+      		)
+      expectMsg(AppendSuccess(2))
+      follower.stateData.log must contain (LogEntry("op", 3))
+      follower.stateData.log.last must be (LogEntry("op2", 3))
+    }
+    
     "grant vote if candidate term is higher to own term" in {
       follower.setState(Follower, Data(
           currentTerm = 2,

@@ -95,7 +95,9 @@ class Raft() extends Actor with FSM[Role, Data] {
     // if newer entries exist in log these are not committed and can 
     // safely be removed - should add check during exhaustive testing
     // to ensure property holds
-    (AppendSuccess(data.currentTerm), data)
+    val log = data.log.take(rpc.prevLogIndex) ::: rpc.entries
+    val updatedData = data.copy(log = log)
+    (AppendSuccess(data.currentTerm), updatedData)
   }
   
   /*
