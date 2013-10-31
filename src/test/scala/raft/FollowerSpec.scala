@@ -241,14 +241,14 @@ class FollowerSpec extends RaftSpec {
     }
     
     "reset timeout after receiving AppendEntriesRPC" in {
-//      follower.setState(Follower, Data(2, None, List(), 1, 1))
-//      follower.setTimer("timeout", Timeout, 200 millis, false)
-//      Thread.sleep(150)
-//      follower ! AppendEntries() 
-//      Thread.sleep(100) // ensures first timeout has expired 
-//      follower.stateName must be (Follower) // stays as follower
-//      follower.isTimerActive("timeout") must be (true)
-      pending
+      follower.setState(Follower, Data(2, None,
+          List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
+      follower.setTimer("timeout", Timeout, 200 millis, false)
+      Thread.sleep(150)
+      follower ! AppendEntries(3, 1, 1, 2, List(LogEntry("op", 3)), 0)
+      Thread.sleep(100) // ensures first timeout has expired 
+      follower.stateName must be (Follower) // stays as follower
+      follower.isTimerActive("timeout") must be (true)
     }
     
     "increase its term when transitioning to candidate" in {

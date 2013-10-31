@@ -50,9 +50,10 @@ class Raft() extends Actor with FSM[Role, Data] {
           resetTimer
           stay using(updData) replying(msg) 
         case (msg: DenyVote, updData) =>
-        	stay using(updData) replying(msg) // continue without resetting timer
+        	stay using(updData) replying(msg)
       }
     case Event(rpc: AppendEntries, data: Data) =>
+      resetTimer
       val (msg, upd) = append(rpc, data)
       stay using upd replying msg
     case Event(Timeout, data) =>
