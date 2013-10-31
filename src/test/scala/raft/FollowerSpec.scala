@@ -214,9 +214,12 @@ class FollowerSpec extends RaftSpec {
       expectMsg(DenyVote(2))
     }
     
-    "convert to candidate if no AppendEntriesRPCs are received " +
-    "from the leader within timeout" in {
-      pending
+    "convert to candidate if no messages are received within timeout" in {
+      follower.setState(Follower, Data(2, None,
+          List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
+      follower.setTimer("timeout", Timeout, 20 millis, false)
+      Thread.sleep(40)
+      follower.stateName must be (Candidate)
     }
     
     "reset timer when granting vote" in {
