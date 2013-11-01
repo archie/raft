@@ -217,7 +217,7 @@ class FollowerSpec extends RaftSpec {
     "convert to candidate if no messages are received within timeout" in {
       follower.setState(Follower, Data(2, None,
           List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
-      follower.setTimer("timeout", Timeout, 20 millis, false)
+      follower.setTimer("timeout", Timeout, 5 millis, false)
       Thread.sleep(40)
       follower.stateName must be (Candidate)
     }
@@ -255,7 +255,28 @@ class FollowerSpec extends RaftSpec {
     }
     
     "increase its term when transitioning to candidate" in {
-      pending
+      follower.setState(Follower, Data(2, None,
+          List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
+      follower.setTimer("timeout", Timeout, 10 millis, false)
+      follower.stateData.currentTerm must be (2)
+      Thread.sleep(30)
+      follower.stateData.currentTerm must be (3) // is candidate by now
+    }
+    
+    "increase own term if RequestVote contains higher term" in {
+      follower.setState(Follower, Data(2, None,
+          List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
+      follower ! RequestVote(3, 1, 1, 1) // higher term
+      follower.stateName must be (Follower)
+      follower.stateData.currentTerm must be (3)
+    }
+    
+    "increase own term if AppendEntries contains higher term" in {
+      follower.setState(Follower, Data(2, None,
+          List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
+      follower ! AppendEntries(3, 1, 1, 2, List(LogEntry("op", 3)), 0) // higher term
+      follower.stateName must be (Follower)
+      follower.stateData.currentTerm must be (3)
     }
   }
 }

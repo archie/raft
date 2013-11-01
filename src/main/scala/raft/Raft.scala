@@ -14,12 +14,15 @@ case class LogEntry(entry: String, term: Raft.Term)
 
 /* messages */
 sealed trait Message
+case object Timeout extends Message
+
+sealed trait Request extends Message
 case class RequestVote(term: Raft.Term, candidateId: Raft.NodeId,
-    lastLogIndex: Int, lastLogTerm: Raft.Term) extends Message
+    lastLogIndex: Int, lastLogTerm: Raft.Term) extends Request
 case class AppendEntries(term: Raft.Term, leaderId: Raft.NodeId, 
     prevLogIndex: Int, prevLogTerm: Raft.Term, entries: List[LogEntry],
-    leaderCommit: Int)
-case object Timeout extends Message
+    leaderCommit: Int) extends Request
+
 
 sealed trait Vote
 case class DenyVote(term: Raft.Term) extends Vote
@@ -44,7 +47,7 @@ class Raft() extends Actor with FSM[Role, Data] {
   startWith(Follower, Data(0, None, List(), 0, 0))
   
   when(Follower) {
-    case Event(rpc: RequestVote, data: Data) =>
+  	case Event(rpc: RequestVote, data: Data) =>
       vote(rpc, data) match {
         case (msg: GrantVote, updData) =>
           resetTimer
@@ -57,7 +60,7 @@ class Raft() extends Actor with FSM[Role, Data] {
       val (msg, upd) = append(rpc, data)
       stay using upd replying msg
     case Event(Timeout, data) =>
-      goto(Candidate) using data
+      goto(Candidate) using nextTerm(data)
   }
   
   when(Candidate) {
@@ -71,6 +74,9 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
   
   initialize()
+  
+  private def nextTerm(data: Data): Data = 
+    data.copy(currentTerm = data.currentTerm + 1)
   
   /*
    * AppendEntries handling 
