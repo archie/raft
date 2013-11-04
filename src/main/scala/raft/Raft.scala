@@ -66,15 +66,15 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
   
   when(Candidate) {
-    case Event(rpc: RequestVote, d: Data) if rpc.candidateId == self =>
-      self ! GrantVote(d.currentTerm) 
-      stay using d
-  	case Event(GrantVote(term), d: Data) if hasMajorityVotes(d) =>
-      goto(Leader) using initialLeaderData(d)
-    case Event(GrantVote(term), d: Data) =>
-      stay using d.copy(votesReceived = sender :: d.votesReceived)
-    case Event(rpc: AppendEntries, d: Data) => 
-      goto(Follower) using d
+    case Event(rpc: RequestVote, data: Data) if rpc.candidateId == self =>
+      self ! GrantVote(data.currentTerm) 
+      stay using data
+  	case Event(GrantVote(term), data: Data) if hasMajorityVotes(data) =>
+      goto(Leader) using initialLeaderData(data)
+    case Event(GrantVote(term), data: Data) =>
+      stay using data.copy(votesReceived = sender :: data.votesReceived)
+    case Event(rpc: AppendEntries, data: Data) => 
+      goto(Follower) using data
     case Event(Timeout, data: Data) => 
       goto(Candidate) using nextTerm(data)
   }
