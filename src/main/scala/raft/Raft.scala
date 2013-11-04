@@ -47,7 +47,7 @@ class Raft() extends Actor with FSM[Role, Data] {
   startWith(Follower, Data(0, None, List(), 0, 0))
   
   when(Follower) {
-  	case Event(rpc: RequestVote, data: Data) =>
+    case Event(rpc: RequestVote, data: Data) =>
       vote(rpc, data) match {
         case (msg: GrantVote, updData) =>
           resetTimer
