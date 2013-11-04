@@ -62,7 +62,16 @@ class CandidateSpec extends RaftSpec {
     }
     
     "convert to follower if receiving append entries message from new leader" in {
-      pending
+      candidate.setState(Candidate, initialCandidateState)
+      candidate ! AppendEntries(
+      		term = 4,
+          leaderId = 1,
+          prevLogIndex = 3,
+          prevLogTerm = 2,
+          entries = List(LogEntry("op", 2)),
+          leaderCommit = 0
+      		)
+      candidate.stateName must be (Follower)
     }
     
     "start a new election if timeout elapses" in {

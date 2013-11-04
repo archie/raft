@@ -70,6 +70,8 @@ class Raft() extends Actor with FSM[Role, Data] {
       goto(Leader) using initialLeaderData(d)
     case Event(GrantVote(term), d: Data) =>
       stay using d.copy(votesReceived = sender :: d.votesReceived)
+    case Event(rpc: AppendEntries, d: Data) => 
+      goto(Follower) using d
   }
   
   when(Leader) {
@@ -84,12 +86,21 @@ class Raft() extends Actor with FSM[Role, Data] {
   
   initialize() // akka specific
   
+  /*
+   *  --- Internals ---
+   */
+  
   private def initialLeaderData(d: Data) = d.copy()
   
   private def hasMajorityVotes(d: Data) = 
     ((d.votesReceived.length + 1) >= Math.ceil(d.nodes.length / 2.0)) 
+    // adds 1 since just received vote is not included
     
-  
+  private def resetTimer = {
+    cancelTimer("timeout")
+    setTimer("timeout", Timeout, 200 millis, false) // should pick random time
+  }
+    
   private def nextTerm(data: Data): Data = 
     data.copy(currentTerm = data.currentTerm + 1)
   
@@ -121,14 +132,6 @@ class Raft() extends Actor with FSM[Role, Data] {
     val log = data.log.take(rpc.prevLogIndex) ::: rpc.entries
     val updatedData = data.copy(log = log)
     (AppendSuccess(data.currentTerm), updatedData)
-  }
-  
-  /*
-   * Timer 
-   */
-  private def resetTimer = {
-    cancelTimer("timeout")
-    setTimer("timeout", Timeout, 200 millis, false) // should pick random time
   }
   
   /*
