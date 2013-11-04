@@ -12,7 +12,13 @@ class FollowerSpec extends RaftSpec {
   "a follower" must {
     "not append entries if requester's term is less than current term" in {
     	follower.setState(Follower, Data(2, None, List(), 1, 1))
-    	follower ! AppendEntries(1, testActor, 1, 1, List(LogEntry("op", 1)), 1)
+    	follower ! AppendEntries(
+    	    term = 1, 
+    	    leaderId = testActor, 
+    	    prevLogIndex = 1, 
+    	    prevLogTerm = 1, 
+    	    entries = List(LogEntry("op", 1)), 
+    	    leaderCommit = 1)
     	expectMsg(AppendFailure(2))
     }
     
