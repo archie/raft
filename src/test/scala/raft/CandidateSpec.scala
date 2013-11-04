@@ -90,8 +90,13 @@ class CandidateSpec extends RaftSpec {
     }
     
     "start a new election if timeout elapses" in {
-      pending
-      // i.e., no messages are received within the timeout
+      candidate.setState(Candidate, initialCandidateState) // reusing state
+      candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
+      Thread.sleep(40) // ensure timeout elapses
+ 
+      // i.e., no messages are received within the timeout 
+      candidate.stateName must be (Candidate)
+      candidate.stateData.currentTerm must be (initialCandidateState.currentTerm + 1)
     }
   }
 }

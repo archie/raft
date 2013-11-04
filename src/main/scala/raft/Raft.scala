@@ -75,6 +75,8 @@ class Raft() extends Actor with FSM[Role, Data] {
       stay using d.copy(votesReceived = sender :: d.votesReceived)
     case Event(rpc: AppendEntries, d: Data) => 
       goto(Follower) using d
+    case Event(Timeout, data: Data) => 
+      goto(Candidate) using nextTerm(data)
   }
   
   when(Leader) {
@@ -88,7 +90,7 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
   
   onTransition {
-    case Follower -> Candidate =>
+    case (Follower | Candidate) -> Candidate =>
       val lastTerm = if (stateData.log.length > 0) stateData.log.last.term else 0
       val lastIndex = if (stateData.log.length > 0) stateData.log.length - 1 else 0
       val nextTerm = stateData.currentTerm + 1
@@ -110,8 +112,8 @@ class Raft() extends Actor with FSM[Role, Data] {
   private def initialLeaderData(d: Data) = d.copy()
   
   private def hasMajorityVotes(d: Data) = 
+  	// adds 1 since just received vote is not included
     ((d.votesReceived.length + 1) >= Math.ceil(d.nodes.length / 2.0)) 
-    // adds 1 since just received vote is not included
     
   private def resetTimer = {
     cancelTimer("timeout")
