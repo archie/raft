@@ -40,7 +40,9 @@ case object Candidate extends Role
 
 /* state data */
 case class Data(currentTerm: Raft.Term, votedFor: Option[Raft.NodeId],
-    log: List[LogEntry], commitIndex: Int, lastApplied: Int)
+    log: List[LogEntry], commitIndex: Int, lastApplied: Int,
+    // the following entries are state meta data
+    nodes: List[ActorRef] = List(), votesReceived: List[ActorRef] = List())
 
 /* Consensus module */
 class Raft() extends Actor with FSM[Role, Data] {
@@ -64,7 +66,14 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
   
   when(Candidate) {
-    case Event(_, _) =>
+    case Event(GrantVote(term), d: Data) if hasMajorityVotes(d) =>
+      goto(Leader) using initialLeaderData(d)
+    case Event(GrantVote(term), d: Data) =>
+      stay using d.copy(votesReceived = sender :: d.votesReceived)
+  }
+  
+  when(Leader) {
+    case Event(_, _) => 
       stay
   }
   
@@ -73,7 +82,13 @@ class Raft() extends Actor with FSM[Role, Data] {
       stay
   }
   
-  initialize()
+  initialize() // akka specific
+  
+  private def initialLeaderData(d: Data) = d.copy()
+  
+  private def hasMajorityVotes(d: Data) = 
+    ((d.votesReceived.length + 1) >= Math.ceil(d.nodes.length / 2.0)) 
+    
   
   private def nextTerm(data: Data): Data = 
     data.copy(currentTerm = data.currentTerm + 1)
@@ -102,6 +117,7 @@ class Raft() extends Actor with FSM[Role, Data] {
     // if newer entries exist in log these are not committed and can 
     // safely be removed - should add check during exhaustive testing
     // to ensure property holds
+    // TODO: wrap in Log data structure
     val log = data.log.take(rpc.prevLogIndex) ::: rpc.entries
     val updatedData = data.copy(log = log)
     (AppendSuccess(data.currentTerm), updatedData)
