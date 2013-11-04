@@ -65,7 +65,7 @@ class CandidateSpec extends RaftSpec {
       candidate.setState(Candidate, initialCandidateState)
       candidate ! AppendEntries(
       		term = 4,
-          leaderId = 1,
+          leaderId = testActor,
           prevLogIndex = 3,
           prevLogTerm = 2,
           entries = List(LogEntry("op", 2)),

@@ -7,7 +7,7 @@ import scala.concurrent.duration._
 /* types */
 object Raft {
   type Term = Int
-  type NodeId = Int
+  type NodeId = ActorRef
 }
 
 case class LogEntry(entry: String, term: Raft.Term)

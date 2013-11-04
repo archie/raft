@@ -7,13 +7,12 @@ import scala.concurrent.duration._
 
 class FollowerSpec extends RaftSpec {
 	
-  val candidateId: Raft.NodeId = 1
   val follower = TestFSMRef(new Raft())
   
   "a follower" must {
     "not append entries if requester's term is less than current term" in {
     	follower.setState(Follower, Data(2, None, List(), 1, 1))
-    	follower ! AppendEntries(1, 1, 1, 1, List(LogEntry("op", 1)), 1)
+    	follower ! AppendEntries(1, testActor, 1, 1, List(LogEntry("op", 1)), 1)
     	expectMsg(AppendFailure(2))
     }
     
@@ -28,7 +27,7 @@ class FollowerSpec extends RaftSpec {
           ))
       follower ! AppendEntries(
           term = 2,
-          leaderId = 1,
+          leaderId = testActor,
           prevLogIndex = 3, // this is one step ahead of follower.log.length-1
           prevLogTerm = 2,
           entries = List(LogEntry("op", 2)),
@@ -48,7 +47,7 @@ class FollowerSpec extends RaftSpec {
           ))
       follower ! AppendEntries(
           term = 3,
-          leaderId = 1,
+          leaderId = testActor,
           prevLogIndex = 1, // last position in follower log
           prevLogTerm = 3,
           entries = List(LogEntry("op", 3)),
@@ -68,7 +67,7 @@ class FollowerSpec extends RaftSpec {
           ))
       follower ! AppendEntries(
           term = 3,
-          leaderId = 1,
+          leaderId = testActor,
           prevLogIndex = 1, // matches follower's entry ("b", 2)
           prevLogTerm = 2, // matches follower's entry's term
           entries = List(LogEntry("op", 3)),
@@ -88,7 +87,7 @@ class FollowerSpec extends RaftSpec {
           ))
       follower ! AppendEntries(
           term = 3,
-          leaderId = 1,
+          leaderId = testActor,
           prevLogIndex = 1, // matches follower's last entry
           prevLogTerm = 2, // matches follower's last entry's term
           entries = List(LogEntry("op", 3)),
@@ -108,7 +107,7 @@ class FollowerSpec extends RaftSpec {
           ))
       follower ! AppendEntries(
           term = 3,
-          leaderId = 1,
+          leaderId = testActor,
           prevLogIndex = 1, // matches follower's last entry
           prevLogTerm = 2, // matches follower's last entry's term
           entries = List(LogEntry("op", 3), LogEntry("op2", 3)),
@@ -127,7 +126,7 @@ class FollowerSpec extends RaftSpec {
           commitIndex = 1,
           lastApplied = 1
           ))
-      follower ! RequestVote(3, candidateId, 2, 2)
+      follower ! RequestVote(3, testActor, 2, 2)
       expectMsg(GrantVote(2)) // should follower update term?
     }
     
@@ -141,7 +140,7 @@ class FollowerSpec extends RaftSpec {
           ))
       follower ! RequestVote(
           term = 2,
-          candidateId = candidateId,
+          candidateId = testActor,
           lastLogIndex = 1,
           lastLogTerm = 2
           )
@@ -162,7 +161,7 @@ class FollowerSpec extends RaftSpec {
           ))
       follower ! RequestVote(
           term = 2,
-          candidateId = candidateId,
+          candidateId = testActor,
           lastLogIndex = 2,
           lastLogTerm = 1
           )
@@ -183,7 +182,7 @@ class FollowerSpec extends RaftSpec {
           ))
       follower ! RequestVote(
           term = 2,
-          candidateId = candidateId,
+          candidateId = testActor,
           lastLogIndex = 1, // shorter log than follower
           lastLogTerm = 2
           )
@@ -198,19 +197,19 @@ class FollowerSpec extends RaftSpec {
           commitIndex = 1,
           lastApplied = 1
           ))
-      follower ! RequestVote(2, candidateId, 2, 2)
+      follower ! RequestVote(2, testActor, 2, 2)
       expectMsg(DenyVote(3)) 
     }
     
     "deny vote if vote for term already cast" in {
       follower.setState(Follower, Data(
           currentTerm = 2,
-          votedFor = Some(2),
+          votedFor = Some(testActor),
           log = List(),
           commitIndex = 1,
           lastApplied = 1
           ))
-      follower ! RequestVote(3, candidateId, 2, 2)
+      follower ! RequestVote(3, testActor, 2, 2)
       expectMsg(DenyVote(2))
     }
     
@@ -226,7 +225,7 @@ class FollowerSpec extends RaftSpec {
       follower.setState(Follower, Data(2, None, List(), 1, 1))
       follower.setTimer("timeout", Timeout, 200 millis, false)
       Thread.sleep(150)
-      follower ! RequestVote(3, candidateId, 2, 2) // follower grants vote
+      follower ! RequestVote(3, testActor, 2, 2) // follower grants vote
       Thread.sleep(100) // ensures first timeout has expired 
       follower.stateName must be (Follower) // stays as follower
       follower.isTimerActive("timeout") must be (true)
@@ -237,7 +236,7 @@ class FollowerSpec extends RaftSpec {
       follower.setState(Follower, Data(2, None, List(), 1, 1))
       follower.setTimer("timeout", Timeout, 200 millis, false)
       Thread.sleep(150)
-      follower ! RequestVote(1, candidateId, 2, 2) // follower denies this
+      follower ! RequestVote(1, testActor, 2, 2) // follower denies this
       Thread.sleep(100) // ensures first timeout has expired 
       follower.stateName must be (Candidate) // timeout happened,
       																			 // transition to candidate
@@ -248,7 +247,7 @@ class FollowerSpec extends RaftSpec {
           List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
       follower.setTimer("timeout", Timeout, 200 millis, false)
       Thread.sleep(150)
-      follower ! AppendEntries(3, 1, 1, 2, List(LogEntry("op", 3)), 0)
+      follower ! AppendEntries(3, testActor, 1, 2, List(LogEntry("op", 3)), 0)
       Thread.sleep(100) // ensures first timeout has expired 
       follower.stateName must be (Follower) // stays as follower
       follower.isTimerActive("timeout") must be (true)
@@ -266,7 +265,7 @@ class FollowerSpec extends RaftSpec {
     "increase own term if RequestVote contains higher term" in {
       follower.setState(Follower, Data(2, None,
           List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
-      follower ! RequestVote(3, 1, 1, 1) // higher term
+      follower ! RequestVote(3, testActor, 1, 1) // higher term
       follower.stateName must be (Follower)
       follower.stateData.currentTerm must be (3)
     }
@@ -274,7 +273,7 @@ class FollowerSpec extends RaftSpec {
     "increase own term if AppendEntries contains higher term" in {
       follower.setState(Follower, Data(2, None,
           List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
-      follower ! AppendEntries(3, 1, 1, 2, List(LogEntry("op", 3)), 0) // higher term
+      follower ! AppendEntries(3, testActor, 1, 2, List(LogEntry("op", 3)), 0) // higher term
       follower.stateName must be (Follower)
       follower.stateData.currentTerm must be (3)
     }
