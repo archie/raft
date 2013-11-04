@@ -20,19 +20,34 @@ class CandidateSpec extends RaftSpec {
    
   "when converting to a candidate it" must {
     "increase its term" in {
-      pending
+      candidate.setState(Follower, initialCandidateState) // reusing state
+      candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
+      Thread.sleep(40) // ensure timeout elapses
+      candidate.stateData.currentTerm must be (4)
     }
     
     "vote for itself" in {
-      pending
+      candidate.setState(Follower, initialCandidateState) // reusing state
+      candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
+      Thread.sleep(40) // ensure timeout elapses
+      candidate.stateData.votesReceived must contain (candidate)
     }
     
     "reset election timeout" in {
-      pending
+      candidate.setState(Follower, initialCandidateState) // reusing state
+      candidate.setTimer("force transition", Timeout, 1 millis, false)
+      Thread.sleep(40) // ensure timeout elapses
+      candidate.isTimerActive("timeout") must be (true) // check that default timer is set
     }
     
     "request votes from all other servers" in {
-      pending
+      candidate.setState(Follower, initialCandidateState) // reusing state
+      candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
+      Thread.sleep(40) // ensure timeout elapses
+      expectMsg(RequestVote(4, candidate, 0, 0))
+      expectMsg(RequestVote(4, candidate, 0, 0))
+      expectMsg(RequestVote(4, candidate, 0, 0))
+      expectMsg(RequestVote(4, candidate, 0, 0))
     }
   }
   

@@ -46,7 +46,7 @@ case class Data(currentTerm: Raft.Term, votedFor: Option[Raft.NodeId],
 
 /* Consensus module */
 class Raft() extends Actor with FSM[Role, Data] {
-  startWith(Follower, Data(0, None, List(), 0, 0))
+  startWith(Follower, Data(0, None, List(), 0, 0)) // TODO: move creation to function
   
   when(Follower) {
     case Event(rpc: RequestVote, data: Data) =>
@@ -66,7 +66,10 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
   
   when(Candidate) {
-    case Event(GrantVote(term), d: Data) if hasMajorityVotes(d) =>
+    case Event(rpc: RequestVote, d: Data) if rpc.candidateId == self =>
+      self ! GrantVote(d.currentTerm) 
+      stay using d
+  	case Event(GrantVote(term), d: Data) if hasMajorityVotes(d) =>
       goto(Leader) using initialLeaderData(d)
     case Event(GrantVote(term), d: Data) =>
       stay using d.copy(votesReceived = sender :: d.votesReceived)
@@ -82,6 +85,20 @@ class Raft() extends Actor with FSM[Role, Data] {
   whenUnhandled {
     case Event(s, d) =>
       stay
+  }
+  
+  onTransition {
+    case Follower -> Candidate =>
+      val lastTerm = if (stateData.log.length > 0) stateData.log.last.term else 0
+      val lastIndex = if (stateData.log.length > 0) stateData.log.length - 1 else 0
+      val nextTerm = stateData.currentTerm + 1
+      stateData.nodes.map(t => t ! RequestVote(
+          term = nextTerm,
+          candidateId = self,
+          lastLogIndex = lastIndex,
+          lastLogTerm = lastTerm
+          ))
+      resetTimer
   }
   
   initialize() // akka specific
@@ -103,6 +120,10 @@ class Raft() extends Actor with FSM[Role, Data] {
     
   private def nextTerm(data: Data): Data = 
     data.copy(currentTerm = data.currentTerm + 1)
+    
+  private def maxTerm(data: Data, term: Raft.Term): Data = {
+    data.copy(currentTerm = Math.max(data.currentTerm, term))
+  }
   
   /*
    * AppendEntries handling 
