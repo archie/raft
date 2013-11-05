@@ -10,6 +10,7 @@ object Raft {
   type NodeId = ActorRef
 }
 
+// this might go elsewhere later
 case class LogEntry(entry: String, term: Raft.Term)
 
 /* messages */
@@ -62,21 +63,24 @@ class Raft() extends Actor with FSM[Role, Data] {
       val (msg, upd) = append(rpc, data)
       stay using upd replying msg
     case Event(Timeout, data) =>
-      goto(Candidate) using nextTerm(data)
+      goto(Candidate) using preparedForCandidate(data)
   }
   
   when(Candidate) {
-    case Event(rpc: RequestVote, data: Data) if rpc.candidateId == self =>
-      self ! GrantVote(data.currentTerm) 
-      stay using data
+  	// voting events  
+  	case Event(rpc: RequestVote, data: Data) if rpc.candidateId == self =>
+      val (msg, updData) = grant(rpc, data) 
+      stay using(updData) replying (msg)
   	case Event(GrantVote(term), data: Data) if hasMajorityVotes(data) =>
       goto(Leader) using initialLeaderData(data)
     case Event(GrantVote(term), data: Data) =>
       stay using data.copy(votesReceived = sender :: data.votesReceived)
+    
+    // other   
     case Event(rpc: AppendEntries, data: Data) => 
       goto(Follower) using data
-    case Event(Timeout, data: Data) => 
-      goto(Candidate) using nextTerm(data)
+    case Event(Timeout, data: Data) =>
+      goto(Candidate) using preparedForCandidate(data)
   }
   
   when(Leader) {
@@ -84,23 +88,18 @@ class Raft() extends Actor with FSM[Role, Data] {
       stay
   }
   
-  whenUnhandled {
-    case Event(s, d) =>
-      stay
-  }
-  
-  onTransition {
-    case (Follower | Candidate) -> Candidate =>
-      val lastTerm = if (stateData.log.length > 0) stateData.log.last.term else 0
-      val lastIndex = if (stateData.log.length > 0) stateData.log.length - 1 else 0
-      val nextTerm = stateData.currentTerm + 1
-      stateData.nodes.map(t => t ! RequestVote(
-          term = nextTerm,
-          candidateId = self,
-          lastLogIndex = lastIndex,
-          lastLogTerm = lastTerm
-          ))
-      resetTimer
+  private def preparedForCandidate(toUpgrade: Data): Data = {
+    val data = nextTerm(toUpgrade)
+    val lastTerm = if (data.log.length > 0) data.log.last.term else 0
+    val lastIndex = if (data.log.length > 0) data.log.length - 1 else 0
+    data.nodes.map(t => t ! RequestVote(
+        term = data.currentTerm,
+        candidateId = self,
+        lastLogIndex = lastIndex,
+        lastLogTerm = lastTerm
+        ))
+    resetTimer
+    data
   }
   
   initialize() // akka specific
@@ -121,7 +120,7 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
     
   private def nextTerm(data: Data): Data = 
-    data.copy(currentTerm = data.currentTerm + 1)
+    data.copy(currentTerm = data.currentTerm + 1, votedFor = None)
     
   private def maxTerm(data: Data, term: Raft.Term): Data = {
     data.copy(currentTerm = Math.max(data.currentTerm, term))

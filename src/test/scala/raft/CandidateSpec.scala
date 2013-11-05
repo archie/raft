@@ -8,7 +8,8 @@ import scala.concurrent.duration._
 
 class CandidateSpec extends RaftSpec {
 
-  val candidate = TestFSMRef(new Raft())
+  val candidate = TestFSMRef(new Raft()) 
+  
   val initialCandidateState = Data(
       currentTerm = 3, 
       votedFor = None,
@@ -74,6 +75,14 @@ class CandidateSpec extends RaftSpec {
 			    })
       Thread.sleep(50)
       candidate.stateName must be (Candidate)
+    }
+    
+    "ensure that receiving grant does not trigger new request vote" in {
+    	val probe = TestProbe()
+			val cand = TestFSMRef(new Raft())
+			cand.setState(Candidate, initialCandidateState)
+    	probe.send(cand, GrantVote(3))    	
+    	probe.expectNoMsg
     }
     
     "convert to follower if receiving append entries message from new leader" in {
