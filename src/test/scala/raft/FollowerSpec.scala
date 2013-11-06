@@ -79,7 +79,7 @@ class FollowerSpec extends RaftSpec {
           entries = List(LogEntry("op", 3)),
           leaderCommit = 0
         )
-        expectMsg(AppendSuccess(2))
+        expectMsg(AppendSuccess(3))
         follower.stateData.log must not contain (LogEntry("remove", 2))
       }
 
@@ -99,7 +99,7 @@ class FollowerSpec extends RaftSpec {
         entries = List(LogEntry("op", 3)),
         leaderCommit = 0
       )
-      expectMsg(AppendSuccess(2))
+      expectMsg(AppendSuccess(3))
       follower.stateData.log.last.entry must be("op")
     }
 
@@ -119,7 +119,7 @@ class FollowerSpec extends RaftSpec {
         entries = List(LogEntry("op", 3), LogEntry("op2", 3)),
         leaderCommit = 0
       )
-      expectMsg(AppendSuccess(2))
+      expectMsg(AppendSuccess(3))
       follower.stateData.log must contain(LogEntry("op", 3))
       follower.stateData.log.last must be(LogEntry("op2", 3))
     }
@@ -133,7 +133,7 @@ class FollowerSpec extends RaftSpec {
         lastApplied = 1
       ))
       follower ! RequestVote(3, testActor, 2, 2)
-      expectMsg(GrantVote(2)) // should follower update term?
+      expectMsg(GrantVote(3))
     }
 
     "grant vote if candidate is exactly equal" in {
@@ -216,13 +216,13 @@ class FollowerSpec extends RaftSpec {
         lastApplied = 1
       ))
       follower ! RequestVote(3, testActor, 2, 2)
-      expectMsg(DenyVote(2))
+      expectMsg(DenyVote(3))
     }
 
     "convert to candidate if no messages are received within timeout" in {
       follower.setState(Follower, Data(2, None,
         List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
-      follower.setTimer("timeout", Timeout, 5 millis, false)
+      follower.setTimer("timeout", Timeout, 1 millis, false)
       Thread.sleep(40)
       follower.stateName must be(Candidate)
     }
@@ -262,7 +262,7 @@ class FollowerSpec extends RaftSpec {
     "increase its term when transitioning to candidate" in {
       follower.setState(Follower, Data(2, None,
         List(LogEntry("a", 2), LogEntry("b", 2)), 0, 0))
-      follower.setTimer("timeout", Timeout, 10 millis, false)
+      follower.setTimer("timeout", Timeout, 1 millis, false)
       follower.stateData.currentTerm must be(2)
       Thread.sleep(30)
       follower.stateData.currentTerm must be(3) // is candidate by now

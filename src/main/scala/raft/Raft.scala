@@ -121,9 +121,8 @@ class Raft() extends Actor with FSM[Role, Data] {
   private def nextTerm(data: Data): Data =
     data.copy(currentTerm = data.currentTerm + 1, votedFor = None)
 
-  private def maxTerm(data: Data, term: Raft.Term): Data = {
-    data.copy(currentTerm = Math.max(data.currentTerm, term))
-  }
+  private def maxTerm(data: Data, term: Raft.Term): Raft.Term =
+    Math.max(data.currentTerm, term)
 
   /*
    * AppendEntries handling 
@@ -151,25 +150,31 @@ class Raft() extends Actor with FSM[Role, Data] {
     // to ensure property holds
     // TODO: wrap in Log data structure
     val log = data.log.take(rpc.prevLogIndex) ::: rpc.entries
-    val updatedData = data.copy(log = log)
-    (AppendSuccess(data.currentTerm), updatedData)
+    val updatedData = data.copy(currentTerm = maxTerm(data, rpc.term), log = log)
+    (AppendSuccess(updatedData.currentTerm), updatedData)
   }
 
   /*
    * Determine whether to grant or deny vote
    */
   private def vote(rpc: RequestVote, data: Data): (Vote, Data) =
-    if (alreadyVoted(data)) deny(data)
-    else if (rpc.term < data.currentTerm) deny(data)
+    if (alreadyVoted(data)) deny(rpc, data)
+    else if (rpc.term < data.currentTerm) deny(rpc, data)
     else if (rpc.term == data.currentTerm)
-      if (candidateLogTermIsBehind(rpc, data)) deny(data)
-      else if (candidateLogTermIsEqualButHasShorterLog(rpc, data)) deny(data)
+      if (candidateLogTermIsBehind(rpc, data)) deny(rpc, data)
+      else if (candidateLogTermIsEqualButHasShorterLog(rpc, data)) deny(rpc, data)
       else grant(rpc, data) // follower and candidate are equal, grant
     else grant(rpc, data) // candidate is ahead, grant
 
-  private def deny(d: Data) = (DenyVote(d.currentTerm), d)
+  private def deny(rpc: RequestVote, d: Data) = {
+    val newdata = d.copy(currentTerm = maxTerm(d, rpc.term))
+    (DenyVote(newdata.currentTerm), newdata)
+  }
   private def grant(rpc: RequestVote, d: Data): (Vote, Data) = {
-    val newdata = d.copy(votedFor = Some(rpc.candidateId))
+    val newdata = d.copy(
+      currentTerm = maxTerm(d, rpc.term),
+      votedFor = Some(rpc.candidateId)
+    )
     (GrantVote(newdata.currentTerm), newdata)
   }
 
