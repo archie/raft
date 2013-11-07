@@ -24,6 +24,8 @@ Moreover, Akka suitable for writing distributed applications and Scala is a pret
 
 ## Progress
 
+[![Build Status](https://travis-ci.org/archie/raft.png)](https://travis-ci.org/archie/raft)
+
 * 6/11/13 - Adding plugin [scalariform](https://github.com/mdr/scalariform) to maintain code style, fixing remaining follower test cases.
 * 5/11/13 - Candidate state completed.
 * 31/10/13 - Most of follower state is complete. It is missing ability to increase term if receiving message with a higher term number. 
