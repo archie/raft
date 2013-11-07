@@ -27,6 +27,7 @@ class LeaderSpec extends RaftSpec {
     "send a heartbeat to each server to establish its authority" in {
       leader.setState(Candidate, exitCandidateState)
       leader ! GrantVote(2) // makes candidate become leader
+      Thread.sleep(30)
       val message = AppendEntries(2, leader, 1, 1, List(), 1)
       expectMsg(message) // empty log = heartbeat
       probes.map(x => x.expectMsg(message))
@@ -35,12 +36,17 @@ class LeaderSpec extends RaftSpec {
     "initialise a next index for each follower to leader's last log index + 1" in {
       leader.setState(Candidate, exitCandidateState)
       leader ! GrantVote(2) // makes candidate become leader
+      Thread.sleep(30)
       leader.stateData.nextIndex must contain key (testActor)
       leader.stateData.nextIndex(testActor) must be(exitCandidateState.log.length)
     }
 
     "initialise a match index for each follower to 0" in {
-      pending
+      leader.setState(Candidate, exitCandidateState)
+      leader ! GrantVote(2) // makes candidate become leader
+      Thread.sleep(30)
+      leader.stateData.matchIndex must contain key (testActor)
+      leader.stateData.matchIndex(testActor) must be(0)
     }
   }
 
