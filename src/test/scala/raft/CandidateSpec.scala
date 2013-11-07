@@ -13,7 +13,7 @@ class CandidateSpec extends RaftSpec {
   val initialCandidateState = Data(
     currentTerm = 3,
     votedFor = None,
-    log = List(),
+    log = List(LogEntry("a", 2)),
     commitIndex = 0,
     lastApplied = 0,
     nodes = List(testActor, testActor, testActor, testActor, candidate),
@@ -45,10 +45,10 @@ class CandidateSpec extends RaftSpec {
       candidate.setState(Follower, initialCandidateState) // reusing state
       candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
       Thread.sleep(40) // ensure timeout elapses
-      expectMsg(RequestVote(4, candidate, 0, 0))
-      expectMsg(RequestVote(4, candidate, 0, 0))
-      expectMsg(RequestVote(4, candidate, 0, 0))
-      expectMsg(RequestVote(4, candidate, 0, 0))
+      expectMsg(RequestVote(4, candidate, 0, 2))
+      expectMsg(RequestVote(4, candidate, 0, 2))
+      expectMsg(RequestVote(4, candidate, 0, 2))
+      expectMsg(RequestVote(4, candidate, 0, 2))
     }
   }
 
