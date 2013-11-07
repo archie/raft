@@ -39,10 +39,23 @@ case object Follower extends Role
 case object Candidate extends Role
 
 /* state data */
-case class Data(currentTerm: Raft.Term, votedFor: Option[Raft.NodeId],
-  log: List[LogEntry], commitIndex: Int, lastApplied: Int,
-  // the following entries are state meta data
-  nodes: List[ActorRef] = List(), votesReceived: List[ActorRef] = List())
+case class Data(
+  currentTerm: Raft.Term, // persisted all states
+  votedFor: Option[Raft.NodeId], // persisted all states
+  log: List[LogEntry], // persisted all states
+  commitIndex: Int, // volatile all states
+  lastApplied: Int, // volatile all states
+
+  // leaders only
+  nextIndex: Map[Raft.NodeId, Int] = Map(), // volatile
+  matchIndex: Map[Raft.NodeId, Int] = Map(), // volatile 
+
+  // candidates only 
+  votesReceived: List[Raft.NodeId] = List(), // volatile
+
+  // config data
+  nodes: List[Raft.NodeId] = List() // persistent
+  )
 
 /* Consensus module */
 class Raft() extends Actor with FSM[Role, Data] {
