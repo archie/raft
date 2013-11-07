@@ -84,7 +84,7 @@ class Raft() extends Actor with FSM[Role, Data] {
       val (msg, updData) = grant(rpc, data)
       stay using (updData) replying (msg)
     case Event(GrantVote(term), data: Data) if hasMajorityVotes(data) =>
-      goto(Leader) using initialLeaderData(data)
+      goto(Leader) using preparedForLeader(data)
     case Event(GrantVote(term), data: Data) =>
       stay using data.copy(votesReceived = sender :: data.votesReceived)
 
@@ -114,13 +114,31 @@ class Raft() extends Actor with FSM[Role, Data] {
     data
   }
 
+  private def preparedForLeader(d: Data) = {
+    val lastIndex = if (d.log.length > 0) d.log.length - 1 else 0
+    val lastTerm = if (d.log.length > 0) d.log.last.term else 0
+    val matchIndex = d.nodes.map(node => (node, 0)).toMap
+    val nextIndex = d.nodes.map(node => (node, d.log.length)).toMap
+    d.nodes.map(node =>
+      node ! AppendEntries(
+        term = d.currentTerm,
+        leaderId = self,
+        prevLogIndex = lastIndex,
+        prevLogTerm = lastTerm,
+        entries = List(),
+        leaderCommit = d.commitIndex)
+    )
+    d.copy(
+      matchIndex = matchIndex,
+      nextIndex = nextIndex
+    )
+  }
+
   initialize() // akka specific
 
   /*
    *  --- Internals ---
    */
-
-  private def initialLeaderData(d: Data) = d.copy()
 
   private def hasMajorityVotes(d: Data) =
     // adds 1 since just received vote is not included
