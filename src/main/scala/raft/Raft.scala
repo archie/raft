@@ -3,6 +3,7 @@ package raft
 import scala.language.postfixOps
 import akka.actor.{ Actor, ActorRef, FSM }
 import scala.concurrent.duration._
+import scala.concurrent.Promise
 
 /* types */
 object Raft {
@@ -24,8 +25,6 @@ case class AppendEntries(term: Raft.Term, leaderId: Raft.NodeId,
   prevLogIndex: Int, prevLogTerm: Raft.Term, entries: List[LogEntry],
   leaderCommit: Int) extends Request
 
-case class ClientCommand(id: Int, command: String) extends Message
-
 sealed trait Vote
 case class DenyVote(term: Raft.Term) extends Vote
 case class GrantVote(term: Raft.Term) extends Vote
@@ -40,6 +39,11 @@ case object Leader extends Role
 case object Follower extends Role
 case object Candidate extends Role
 
+/* Client messages and data */
+case class ClientCommand(id: Int, command: String) extends Message
+case class ClientRef(client: ActorRef, cid: Int)
+case class StoredClientRequest(command: ClientCommand, successes: Int = 0)
+
 /* state data */
 case class Data(
   currentTerm: Raft.Term, // persisted all states
@@ -51,6 +55,7 @@ case class Data(
   // leaders only
   nextIndex: Map[Raft.NodeId, Int] = Map(), // volatile
   matchIndex: Map[Raft.NodeId, Int] = Map(), // volatile 
+  pendingRequests: Map[ClientRef, StoredClientRequest] = Map(), // volatile
 
   // candidates only 
   votesReceived: List[Raft.NodeId] = List(), // volatile
@@ -98,8 +103,24 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
 
   when(Leader) {
-    case Event(clientRpc: ClientCommand, d: Data) =>
-      val uniqueId = (sender, clientRpc.id)
+    case Event(clientRpc: ClientCommand, data: Data) =>
+      val addedEntryData = appendLogEntry(clientRpc, data)
+      val addedPendingRequest = createPendingRequest(sender, clientRpc, addedEntryData)
+      val appendEntriesMessage = AppendEntries(
+        term = addedPendingRequest.currentTerm,
+        leaderId = self,
+        prevLogIndex = lastIndex(addedPendingRequest),
+        prevLogTerm = lastTerm(addedPendingRequest),
+        entries = List(addedPendingRequest.log.last),
+        leaderCommit = addedPendingRequest.commitIndex
+      )
+      data.nodes.filterNot(_ == self).map(_ ! appendEntriesMessage)
+      stay using addedPendingRequest
+    case Event(succs: AppendSuccess, d: Data) =>
+      // set pendingRequests((sender, succs.id)).successes += 1
+      // if majority(pendingRequests((sender, succs.id).successes)
+      // 	then result = statem.apply(pendingRequests((sender, succs.id)).command)
+      //    and clientRef ! result
       stay
   }
 
@@ -109,29 +130,25 @@ class Raft() extends Actor with FSM[Role, Data] {
 
   private def preparedForCandidate(toUpgrade: Data): Data = {
     val data = nextTerm(toUpgrade)
-    val lastTerm = if (data.log.length > 0) data.log.last.term else 0
-    val lastIndex = if (data.log.length > 0) data.log.length - 1 else 0
     data.nodes.map(t => t ! RequestVote(
       term = data.currentTerm,
       candidateId = self,
-      lastLogIndex = lastIndex,
-      lastLogTerm = lastTerm
+      lastLogIndex = lastIndex(data),
+      lastLogTerm = lastTerm(data)
     ))
     resetTimer
     data
   }
 
   private def preparedForLeader(d: Data) = {
-    val lastIndex = if (d.log.length > 0) d.log.length - 1 else 0
-    val lastTerm = if (d.log.length > 0) d.log.last.term else 0
     val matchIndex = d.nodes.map(node => (node, 0)).toMap
     val nextIndex = d.nodes.map(node => (node, d.log.length)).toMap
     d.nodes.map(node =>
       node ! AppendEntries(
         term = d.currentTerm,
         leaderId = self,
-        prevLogIndex = lastIndex,
-        prevLogTerm = lastTerm,
+        prevLogIndex = lastIndex(d),
+        prevLogTerm = lastTerm(d),
         entries = List(),
         leaderCommit = d.commitIndex)
     )
@@ -147,6 +164,19 @@ class Raft() extends Actor with FSM[Role, Data] {
   /*
    *  --- Internals ---
    */
+
+  private def lastIndex(d: Data): Int = if (d.log.length > 0) d.log.length - 1 else 0
+  private def lastTerm(d: Data): Int = if (d.log.length > 0) d.log.last.term else 0
+
+  private def createPendingRequest(sender: ActorRef, rpc: ClientCommand, data: Data): Data = {
+    //d.pendingRequests += (uniqueId -> (clientRef, List()))
+    val uniqueId = ClientRef(sender, rpc.id)
+    val request = StoredClientRequest(rpc)
+    data.copy(pendingRequests = data.pendingRequests + (uniqueId -> request))
+  }
+
+  private def appendLogEntry(rpc: ClientCommand, data: Data): Data =
+    data.copy(log = data.log :+ LogEntry(rpc.command, data.currentTerm))
 
   private def hasMajorityVotes(d: Data) =
     // adds 1 since just received vote is not included

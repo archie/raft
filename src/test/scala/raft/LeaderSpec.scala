@@ -69,11 +69,34 @@ class LeaderSpec extends RaftSpec {
 
   "when receiving a client command a leader" must {
     "append entry to its local log" in {
-      pending
+      leader.setState(Leader, isLeaderState)
+      leader ! ClientCommand(100, "add")
+      leader.stateData.log must contain(LogEntry("add", 2)) // 2 == currentTerm
+    }
+
+    "create a pending client request" in {
+      leader.setState(Leader, isLeaderState)
+      leader ! ClientCommand(100, "add")
+      leader.stateData.pendingRequests must contain key (ClientRef(testActor, 100))
     }
 
     "respond to client after entry is applied to state machine" in {
       pending
+    }
+
+    "broadcast AppendEntries rpc to all followers" in {
+      val probes = for (i <- List.range(0, 4)) yield TestProbe()
+      val probedState = isLeaderState.copy(nodes = probes.map(_.ref))
+      leader.setState(Leader, probedState)
+      leader ! ClientCommand(100, "add")
+      for (p <- probes) yield p.expectMsg(AppendEntries(
+        term = 2,
+        leaderId = leader,
+        prevLogIndex = 3,
+        prevLogTerm = 2,
+        entries = List(LogEntry("add", 2)),
+        leaderCommit = 2
+      ))
     }
   }
 
@@ -87,8 +110,9 @@ class LeaderSpec extends RaftSpec {
       leader.setTimer("timeout", Timeout, 100 millis, false)
       Thread.sleep(80)
       leader ! ClientCommand(100, "add")
-      Thread.sleep(50) // 80+50 is enough to cause timeout
+      Thread.sleep(80) // 80+50 is enough to cause timeout
       leader.isTimerActive("timeout")
+      // TODO: check if this test case is broken
     }
 
     "send append entries rpc to follower if last log index is " +
