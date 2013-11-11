@@ -23,6 +23,16 @@ class LeaderSpec extends RaftSpec {
     nodes = allNodes
   )
 
+  val isLeaderState = Data(
+    currentTerm = 2,
+    votedFor = None,
+    log = List(LogEntry("a", 1), LogEntry("b", 1), LogEntry("c", 2)),
+    commitIndex = 2,
+    lastApplied = 2,
+    votesReceived = List(),
+    nodes = allNodes
+  )
+
   "upon election a leader" must {
     "send a heartbeat to each server to establish its authority" in {
       leader.setState(Candidate, exitCandidateState)
@@ -48,6 +58,13 @@ class LeaderSpec extends RaftSpec {
       leader.stateData.matchIndex must contain key (testActor)
       leader.stateData.matchIndex(testActor) must be(0)
     }
+
+    "have heartbeat timer set" in {
+      leader.setState(Candidate, exitCandidateState)
+      leader ! GrantVote(2) // makes candidate become leader
+      Thread.sleep(10)
+      leader.isTimerActive("timeout") must be(true)
+    }
   }
 
   "when receiving a client command a leader" must {
@@ -66,7 +83,12 @@ class LeaderSpec extends RaftSpec {
     }
 
     "reschedule a heartbeat if an append entries rpc call is made" in {
-      pending
+      leader.setState(Leader, isLeaderState)
+      leader.setTimer("timeout", Timeout, 100 millis, false)
+      Thread.sleep(80)
+      leader ! ClientCommand(100, "add")
+      Thread.sleep(50) // 80+50 is enough to cause timeout
+      leader.isTimerActive("timeout")
     }
 
     "send append entries rpc to follower if last log index is " +

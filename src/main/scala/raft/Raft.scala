@@ -24,6 +24,8 @@ case class AppendEntries(term: Raft.Term, leaderId: Raft.NodeId,
   prevLogIndex: Int, prevLogTerm: Raft.Term, entries: List[LogEntry],
   leaderCommit: Int) extends Request
 
+case class ClientCommand(id: Int, command: String) extends Message
+
 sealed trait Vote
 case class DenyVote(term: Raft.Term) extends Vote
 case class GrantVote(term: Raft.Term) extends Vote
@@ -96,8 +98,13 @@ class Raft() extends Actor with FSM[Role, Data] {
   }
 
   when(Leader) {
-    case Event(_, _) =>
+    case Event(clientRpc: ClientCommand, d: Data) =>
+      val uniqueId = (sender, clientRpc.id)
       stay
+  }
+
+  whenUnhandled {
+    case Event(_, _) => stay
   }
 
   private def preparedForCandidate(toUpgrade: Data): Data = {
@@ -128,6 +135,7 @@ class Raft() extends Actor with FSM[Role, Data] {
         entries = List(),
         leaderCommit = d.commitIndex)
     )
+    resetTimer
     d.copy(
       matchIndex = matchIndex,
       nextIndex = nextIndex
@@ -146,7 +154,7 @@ class Raft() extends Actor with FSM[Role, Data] {
 
   private def resetTimer = {
     cancelTimer("timeout")
-    setTimer("timeout", Timeout, 200 millis, false) // should pick random time
+    setTimer("timeout", Timeout, 200 millis, false) // TODO: should pick random time
   }
 
   private def nextTerm(data: Data): Data =
