@@ -54,27 +54,27 @@ class CandidateSpec extends RaftSpec {
 
   "a candidate" must {
     "become leader if receiving grants from a majority of servers" in {
-      candidate.setState(Candidate, initialCandidateState)
+      val cand = TestFSMRef(new Raft())
+      cand.setState(Candidate, initialCandidateState)
 
-      // sending grant votes
       for (i <- List.range(0, 4)) // excluding candidate  
         yield actor(new Act {
-        whenStarting { candidate ! GrantVote(3) }
+        whenStarting { cand ! GrantVote(3) }
       })
 
       Thread.sleep(50) // give candidate time to receive and parse messages
-
-      candidate.stateName must be(Leader)
+      cand.stateName must be(Leader)
     }
 
     "remain a candidate if the majority vote is not yet received" in {
-      candidate.setState(Candidate, initialCandidateState)
+      val cand = TestFSMRef(new Raft())
+      cand.setState(Candidate, initialCandidateState)
       for (i <- List.range(0, 2)) // yields two votes  
         yield actor(new Act {
-        whenStarting { candidate ! GrantVote(3) }
+        whenStarting { cand ! GrantVote(3) }
       })
       Thread.sleep(50)
-      candidate.stateName must be(Candidate)
+      cand.stateName must be(Candidate)
     }
 
     "ensure that receiving grant does not trigger new request vote" in {
