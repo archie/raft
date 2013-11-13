@@ -81,7 +81,13 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
       r1.majority(ref, 5) must be(false)
       r1.majority(ref, 3) must be(true)
     }
-    "delete requests that have been replied to" in (pending)
+    "be able to delete requests that have been replied to" in {
+      val request = ClientRequest(ClientCommand(100, "add"), 2)
+      val ref = ClientRef(probe.ref, 100)
+      val r1 = Requests(Map(ref -> request))
+      val r2 = r1.remove(ref)
+      r2.pending must not contain key(ref)
+    }
   }
 
   "log" must {

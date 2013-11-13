@@ -16,6 +16,7 @@ object Term {
 
 case class Requests(pending: Map[ClientRef, ClientRequest] = Map()) {
   def add(ref: ClientRef, req: ClientRequest) = this.copy(pending = pending + (ref -> req))
+  def remove(ref: ClientRef) = this.copy(pending = pending - ref)
   def tick(ref: ClientRef) = pending.get(ref) match {
     case Some(req) =>
       val updRequest = req.copy(successes = req.successes + 1)
