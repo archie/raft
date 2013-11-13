@@ -39,11 +39,19 @@ case class Votes(
 }
 
 case class Meta[C[T]](
-  term: Term,
-  log: List[LogEntry], // TODO: Extract to Log class
-  rsm: ReplicatedStateMachine[C],
-  requests: Requests = Requests(),
-  votes: Votes = Votes())
+    term: Term,
+    log: List[LogEntry], // TODO: Extract to Log class
+    rsm: ReplicatedStateMachine[C],
+    requests: Requests = Requests(),
+    votes: Votes = Votes()) {
+  def votedFor(ref: Raft.NodeId) = votes.votedFor match {
+    case Some(vote) => this
+    case None =>
+      val updVotes = votes.copy(votedFor = Some(ref))
+      // TODO: Persist this value before returning
+      this.copy(votes = updVotes)
+  }
+}
 
 /* state data */
 case class Data(

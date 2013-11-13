@@ -15,13 +15,20 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
   //  state.requests.pending
   //  state.log.*
   //  state.rsm.execute()
-
-  override def beforeEach = state = Meta(Term(1), List(), new TotalOrdering)
+  val testRsm = new TotalOrdering
+  override def beforeEach = state = Meta(Term(1), List(), testRsm)
 
   "meta" must {
     "keep at most one vote for a candidate per term" in {
-      // state.storeVote(ref)
-      pending
+      val thisMeta = Meta(
+        term = Term(1),
+        votes = Votes(votedFor = Some(probe.ref)),
+        log = List(),
+        rsm = testRsm,
+        requests = Requests())
+      val upd = state.votedFor(probe.ref)
+      upd must be(thisMeta)
+      upd.votedFor(TestProbe().ref) must be(thisMeta) // checks that we only can vote once
     }
   }
 
