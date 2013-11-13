@@ -6,6 +6,8 @@ import org.scalatest._
 class ConsensusDataSpec extends RaftSpec with WordSpecLike
     with MustMatchers with BeforeAndAfterEach {
 
+  val probe = TestProbe()
+
   var state: Meta[Command] = _
 
   //  state.term.current
@@ -46,13 +48,11 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
 
   "votes" must {
     "keep track of votes received" in {
-      val probe = TestProbe()
       val v = Votes()
       val v2 = v.gotVoteFrom(probe.ref)
       v2.received must have length (1)
     }
     "check if majority votes received" in {
-      val probe = TestProbe()
       val v = Votes(received = List(probe.ref, probe.ref))
       v.hasMajority(5) must be(false)
       v.hasMajority(3) must be(true)
@@ -60,8 +60,20 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
   }
 
   "client requests" must {
-    "store pending requests" in (pending)
-    "increase append success count per request" in (pending)
+    "store pending requests" in {
+      val r1 = Requests()
+      val request = ClientRequest(ClientCommand(100, "add"))
+      val ref = ClientRef(probe.ref, 100)
+      val r2 = r1.add(ref, request)
+      r2.pending must contain key (ref)
+    }
+    "increase append success count per request" in {
+      val request = ClientRequest(ClientCommand(100, "add"))
+      val ref = ClientRef(probe.ref, 100)
+      val r1 = Requests(Map(ref -> request))
+      val r2 = r1.tick(ref)
+      r2.pending(ref).successes must be(1)
+    }
     "check if majority has been reached per request" in (pending)
     "delete requests that have been replied to" in (pending)
   }

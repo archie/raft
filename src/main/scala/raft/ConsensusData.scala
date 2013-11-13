@@ -14,7 +14,17 @@ object Term {
     else t2
 }
 
-case class Requests(pending: Map[ClientRef, ClientRequest] = Map())
+case class Requests(pending: Map[ClientRef, ClientRequest] = Map()) {
+  def add(ref: ClientRef, req: ClientRequest) = this.copy(pending = pending + (ref -> req))
+  def tick(ref: ClientRef) = pending.get(ref) match {
+    case Some(req) =>
+      val updRequest = req.copy(successes = req.successes + 1)
+      val updPending = pending + (ref -> updRequest)
+      this.copy(pending = updPending)
+    case None => this
+  }
+}
+
 case class Votes(
     votedFor: Option[Raft.NodeId] = None,
     received: List[Raft.NodeId] = List()) {
