@@ -42,27 +42,7 @@ case object Candidate extends Role
 /* Client messages and data */
 case class ClientCommand(id: Int, command: String) extends Message
 case class ClientRef(client: ActorRef, cid: Int)
-case class StoredClientRequest(command: ClientCommand, successes: Int = 0)
-
-/* state data */
-case class Data(
-  currentTerm: Raft.Term, // persisted all states
-  votedFor: Option[Raft.NodeId], // persisted all states
-  log: List[LogEntry], // persisted all states
-  commitIndex: Int, // volatile all states
-  lastApplied: Int, // volatile all states
-
-  // leaders only
-  nextIndex: Map[Raft.NodeId, Int] = Map(), // volatile
-  matchIndex: Map[Raft.NodeId, Int] = Map(), // volatile 
-  pendingRequests: Map[ClientRef, StoredClientRequest] = Map(), // volatile
-
-  // candidates only 
-  votesReceived: List[Raft.NodeId] = List(), // volatile
-
-  // config data
-  nodes: List[Raft.NodeId] = List() // persistent
-  )
+case class ClientRequest(command: ClientCommand, successes: Int = 0)
 
 /* Consensus module */
 class Raft() extends Actor with FSM[Role, Data] {
@@ -171,7 +151,7 @@ class Raft() extends Actor with FSM[Role, Data] {
   private def createPendingRequest(sender: ActorRef, rpc: ClientCommand, data: Data): Data = {
     //d.pendingRequests += (uniqueId -> (clientRef, List()))
     val uniqueId = ClientRef(sender, rpc.id)
-    val request = StoredClientRequest(rpc)
+    val request = ClientRequest(rpc)
     data.copy(pendingRequests = data.pendingRequests + (uniqueId -> request))
   }
 
