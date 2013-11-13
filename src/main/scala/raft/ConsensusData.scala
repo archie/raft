@@ -23,13 +23,17 @@ case class Requests(pending: Map[ClientRef, ClientRequest] = Map()) {
       this.copy(pending = updPending)
     case None => this
   }
+  def majority(ref: ClientRef, size: Int) = pending.get(ref) match {
+    case Some(req) if req.successes >= Math.ceil(size / 2.0) => true
+    case _ => false
+  }
 }
 
 case class Votes(
     votedFor: Option[Raft.NodeId] = None,
     received: List[Raft.NodeId] = List()) {
   def gotVoteFrom(ref: ActorRef): Votes = this.copy(received = ref :: received)
-  def hasMajority(size: Int): Boolean =
+  def majority(size: Int): Boolean =
     (this.received.length >= Math.ceil(size / 2.0))
 }
 

@@ -54,8 +54,8 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
     }
     "check if majority votes received" in {
       val v = Votes(received = List(probe.ref, probe.ref))
-      v.hasMajority(5) must be(false)
-      v.hasMajority(3) must be(true)
+      v.majority(5) must be(false)
+      v.majority(3) must be(true)
     }
   }
 
@@ -74,7 +74,13 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
       val r2 = r1.tick(ref)
       r2.pending(ref).successes must be(1)
     }
-    "check if majority has been reached per request" in (pending)
+    "check if majority has been reached per request" in {
+      val request = ClientRequest(ClientCommand(100, "add"), 2)
+      val ref = ClientRef(probe.ref, 100)
+      val r1 = Requests(Map(ref -> request))
+      r1.majority(ref, 5) must be(false)
+      r1.majority(ref, 3) must be(true)
+    }
     "delete requests that have been replied to" in (pending)
   }
 
