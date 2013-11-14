@@ -69,6 +69,7 @@ case class Meta[C[T]](
   var term: Term,
   log: List[LogEntry], // TODO: Extract to Log class
   rsm: ReplicatedStateMachine[C],
+  var nodes: List[Raft.NodeId],
   var requests: Requests = Requests(),
   var votes: Votes = Votes())
 

@@ -7,6 +7,9 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
     with MustMatchers with BeforeAndAfterEach {
 
   val probe = TestProbe()
+  val nodes = for (i <- List.range(0, 5)) yield TestProbe().ref
+  val nextIndices = (for (i <- List.range(0, 5)) yield (TestProbe().ref, 3)).toMap
+  val matchIndices = (for (i <- List.range(0, 5)) yield (TestProbe().ref, 0)).toMap
 
   var state: Meta[Command] = _
 
@@ -16,7 +19,7 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
   //  state.log.*
   //  state.rsm.execute()
   val testRsm = new TotalOrdering
-  override def beforeEach = state = Meta(Term(1), List(), testRsm)
+  override def beforeEach = state = Meta(Term(1), List(), testRsm, nodes)
 
   "meta" must {
   }
@@ -58,6 +61,7 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
         term = Term(1),
         votes = Votes(votedFor = Some(probe.ref)),
         log = List(),
+        nodes = nodes,
         rsm = testRsm,
         requests = Requests())
       state.votes = state.votes.vote(probe.ref)
@@ -96,9 +100,6 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
       r2.pending must not contain key(ref)
     }
   }
-
-  val nextIndices = (for (i <- List.range(0, 5)) yield (TestProbe().ref, 3)).toMap
-  val matchIndices = (for (i <- List.range(0, 5)) yield (TestProbe().ref, 0)).toMap
 
   "a log" must {
     "maintain a next index for each follower" in {
