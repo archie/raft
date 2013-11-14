@@ -36,22 +36,18 @@ case class Votes(
   def gotVoteFrom(ref: ActorRef): Votes = this.copy(received = ref :: received)
   def majority(size: Int): Boolean =
     (this.received.length >= Math.ceil(size / 2.0))
+  def vote(ref: Raft.NodeId) = votedFor match {
+    case Some(vote) => this
+    case None => copy(votedFor = Some(ref)) // TODO: Persist this value before returning
+  }
 }
 
 case class Meta[C[T]](
-    term: Term,
-    log: List[LogEntry], // TODO: Extract to Log class
-    rsm: ReplicatedStateMachine[C],
-    requests: Requests = Requests(),
-    votes: Votes = Votes()) {
-  def votedFor(ref: Raft.NodeId) = votes.votedFor match {
-    case Some(vote) => this
-    case None =>
-      val updVotes = votes.copy(votedFor = Some(ref))
-      // TODO: Persist this value before returning
-      this.copy(votes = updVotes)
-  }
-}
+  term: Term,
+  log: List[LogEntry], // TODO: Extract to Log class
+  rsm: ReplicatedStateMachine[C],
+  requests: Requests = Requests(),
+  var votes: Votes = Votes())
 
 /* state data */
 case class Data(
