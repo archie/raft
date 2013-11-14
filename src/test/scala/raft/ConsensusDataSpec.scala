@@ -97,11 +97,45 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
     }
   }
 
-  "log" must {
-    "maintain a next index for each follower" in (pending)
-    "decrement the next index for a follower if older log entries must be passed" in (pending)
-    "set the next index for a follower based on the last log entry sent" in (pending)
-    "TODO: match index" in (pending)
+  val nextIndices = (for (i <- List.range(0, 5)) yield (TestProbe().ref, 3)).toMap
+  val matchIndices = (for (i <- List.range(0, 5)) yield (TestProbe().ref, 0)).toMap
+
+  "a log" must {
+    "maintain a next index for each follower" in {
+      //      val nodes = for (i <- List.range(0, 5)) yield (TestProbe().ref, 0)
+      //      val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)), nodes.toMap)
+      //      for (value <- log.nextIndex.values) yield value must be(3)
+      pending
+    }
+    "decrement the next index for a follower if older log entries must be passed" in {
+      val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)),
+        nextIndices, matchIndices)
+      log.decrementNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(2)
+    }
+    "set the next index for a follower based on the last log entry sent" in {
+      val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)),
+        nextIndices, matchIndices)
+      log.resetNextFor(nextIndices.head._1, 60).nextIndex(nextIndices.head._1) must be(60)
+    }
+    "increase match index monotonically" in {
+      val log = Log(
+        entries = List(LogEntry("a", 1), LogEntry("b", 2)),
+        nextIndex = nextIndices,
+        matchIndex = matchIndices)
+      log.matchFor(matchIndices.head._1).matchIndex(matchIndices.head._1) must be(1)
+    }
+    "set match index to specified value" in {
+      val log = Log(
+        entries = List(LogEntry("a", 1), LogEntry("b", 2)),
+        nextIndex = nextIndices,
+        matchIndex = matchIndices)
+      log.matchFor(matchIndices.head._1, Some(100)).matchIndex(matchIndices.head._1) must be(100)
+    }
+    "override apply to initialise with appropiate next and match indices" in {
+      val entries = List(LogEntry("a", 1), LogEntry("b", 2))
+      val nodes = for (n <- List.range(0, 5)) yield TestProbe().ref
+      Log(nodes, entries).nextIndex(nodes(0)) must be(2)
+    }
   }
 
   "replicated state machine" must {

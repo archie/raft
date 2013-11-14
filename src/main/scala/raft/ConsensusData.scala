@@ -42,11 +42,34 @@ case class Votes(
   }
 }
 
+case class Log(
+    entries: List[LogEntry],
+    nextIndex: Map[Raft.NodeId, Int],
+    matchIndex: Map[Raft.NodeId, Int]) {
+  def decrementNextFor(node: Raft.NodeId) =
+    copy(nextIndex = nextIndex + (node -> (nextIndex(node) - 1)))
+  def resetNextFor(node: Raft.NodeId, to: Int) =
+    copy(nextIndex = nextIndex + (node -> to))
+  def matchFor(node: Raft.NodeId, to: Option[Int] = None) = to match {
+    case Some(toVal) => copy(matchIndex = matchIndex + (node -> toVal))
+    case None => copy(matchIndex = matchIndex + (node -> (matchIndex(node) + 1)))
+  }
+}
+
+object Log {
+  def apply(nodes: List[Raft.NodeId], entries: List[LogEntry]): Log = {
+    val nextIndex = entries.length
+    val nextIndices = (for (n <- nodes) yield (n -> nextIndex)).toMap
+    val matchIndices = (for (n <- nodes) yield (n -> 0)).toMap
+    Log(entries, nextIndices, matchIndices)
+  }
+}
+
 case class Meta[C[T]](
-  term: Term,
+  var term: Term,
   log: List[LogEntry], // TODO: Extract to Log class
   rsm: ReplicatedStateMachine[C],
-  requests: Requests = Requests(),
+  var requests: Requests = Requests(),
   var votes: Votes = Votes())
 
 /* state data */
@@ -69,20 +92,6 @@ case class Data(
     nodes: List[Raft.NodeId] = List() // persistent
     ) {
 
-}
-
-case class ConsensusData() {
-  private[raft] var currentTerm: Int = 0
-  def term = currentTerm
-  def nextTerm: ConsensusData = ???
-  def votedFor(node: Raft.NodeId): ConsensusData = ???
-
-  def pending(ref: ClientRef, request: ClientRequest): ConsensusData = ???
-  def incrementPending(ref: ClientRef): ConsensusData = ???
-  def hasAppendMajority(ref: ClientRef): Boolean = ???
-  def removePending(ref: ClientRef): ConsensusData = ???
-
-  def addVote(): ConsensusData = ???
 }
 
 object StateFactory {
