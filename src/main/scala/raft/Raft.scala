@@ -85,27 +85,29 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       goto(Candidate) using preparedForCandidate(data)
   }
 
-  //  when(Leader) {
-  //    case Event(clientRpc: ClientCommand, data: Data) =>
-  //      val addedEntryData = appendLogEntry(clientRpc, data)
-  //      val addedPendingRequest = createPendingRequest(sender, clientRpc, addedEntryData)
-  //      val appendEntriesMessage = AppendEntries(
-  //        term = addedPendingRequest.currentTerm,
-  //        leaderId = self,
-  //        prevLogIndex = lastIndex(addedPendingRequest),
-  //        prevLogTerm = lastTerm(addedPendingRequest),
-  //        entries = List(addedPendingRequest.log.last),
-  //        leaderCommit = addedPendingRequest.commitIndex
-  //      )
-  //      data.nodes.filterNot(_ == self).map(_ ! appendEntriesMessage)
-  //      stay using addedPendingRequest
-  //    case Event(succs: AppendSuccess, d: Data) =>
-  //      // set pendingRequests((sender, succs.id)).successes += 1
-  //      // if majority(pendingRequests((sender, succs.id).successes)
-  //      // 	then result = statem.apply(pendingRequests((sender, succs.id)).command)
-  //      //    and clientRef ! result
-  //      stay
-  //  }
+  when(Leader) {
+    case Event(_, _) =>
+      stay
+    //      case Event(clientRpc: ClientCommand, data: Meta) =>
+    //        val addedEntryData = appendLogEntry(clientRpc, data)
+    //        val addedPendingRequest = createPendingRequest(sender, clientRpc, addedEntryData)
+    //        val appendEntriesMessage = AppendEntries(
+    //          term = addedPendingRequest.currentTerm,
+    //          leaderId = self,
+    //          prevLogIndex = lastIndex(addedPendingRequest),
+    //          prevLogTerm = lastTerm(addedPendingRequest),
+    //          entries = List(addedPendingRequest.log.last),
+    //          leaderCommit = addedPendingRequest.commitIndex
+    //        )
+    //        data.nodes.filterNot(_ == self).map(_ ! appendEntriesMessage)
+    //        stay using addedPendingRequest
+    //      case Event(succs: AppendSuccess, d: Data) =>
+    //         set pendingRequests((sender, succs.id)).successes += 1
+    //         if majority(pendingRequests((sender, succs.id).successes)
+    //         	then result = statem.apply(pendingRequests((sender, succs.id)).command)
+    //            and clientRef ! result
+    //        stay
+  }
 
   whenUnhandled {
     case Event(_, _) => stay

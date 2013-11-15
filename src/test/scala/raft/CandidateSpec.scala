@@ -6,21 +6,24 @@ import akka.testkit._
 import akka.actor.ActorDSL._
 import scala.concurrent.duration._
 
-class CandidateSpec extends RaftSpec {
+class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
 
-  val candidate = TestFSMRef(new Raft())
+  var initialCandidateState: Meta = _
+  var candidate: TestFSMRef[Role, Meta, Raft] = _
 
-  val probes = (for (i <- List.range(0, 3)) yield TestProbe())
-  val allNodes = testActor :: candidate :: probes.map(_.ref)
-
+  def probes(size: Int) = (for (i <- List.range(0, size)) yield TestProbe())
   val totalOrdering = new TotalOrdering
 
-  val initialCandidateState = Meta(
-    term = Term(3),
-    log = Log(allNodes, List(LogEntry("a", 1), LogEntry("b", 2))),
-    rsm = totalOrdering,
-    nodes = allNodes
-  )
+  override def beforeEach = {
+    candidate = TestFSMRef(new Raft())
+    val allNodes = testActor :: candidate :: probes(3).map(_.ref)
+    initialCandidateState = Meta(
+      term = Term(3),
+      log = Log(allNodes, List(LogEntry("a", 1), LogEntry("b", 2))),
+      rsm = totalOrdering,
+      nodes = allNodes
+    )
+  }
 
   "when converting to a candidate it" must {
     "increase its term" in {
@@ -45,13 +48,12 @@ class CandidateSpec extends RaftSpec {
     }
 
     "request votes from all other servers" in {
+      val myprobes = probes(5)
+      initialCandidateState.nodes = myprobes.map(_.ref)
       candidate.setState(Follower, initialCandidateState) // reusing state
       candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
       Thread.sleep(40) // ensure timeout elapses
-      expectMsg(RequestVote(4, candidate, 0, 2))
-      expectMsg(RequestVote(4, candidate, 0, 2))
-      expectMsg(RequestVote(4, candidate, 0, 2))
-      expectMsg(RequestVote(4, candidate, 0, 2))
+      myprobes.map(_.expectMsg(RequestVote(4, candidate, 1, 2)))
     }
   }
 
@@ -102,13 +104,12 @@ class CandidateSpec extends RaftSpec {
     }
 
     "start a new election if timeout elapses" in {
-      candidate.setState(Candidate, initialCandidateState) // reusing state
+      candidate.setState(Candidate, initialCandidateState)
       candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
       Thread.sleep(40) // ensure timeout elapses
-
       // i.e., no messages are received within the timeout 
       candidate.stateName must be(Candidate)
-      candidate.stateData.term.current must be(initialCandidateState.term.current + 1)
+      candidate.stateData.term.current must be(4) // since initial was 3
     }
   }
 }
