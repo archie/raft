@@ -1,7 +1,7 @@
 package raft
 
 import scala.language.postfixOps
-import akka.actor.{ Actor, ActorRef, FSM }
+import akka.actor.{ Actor, ActorRef, FSM, LoggingFSM }
 import scala.concurrent.duration._
 import scala.concurrent.Promise
 
@@ -45,7 +45,8 @@ case class ClientRef(client: ActorRef, cid: Int)
 case class ClientRequest(command: ClientCommand, successes: Int = 0)
 
 /* Consensus module */
-class Raft() extends Actor with FSM[Role, Meta] {
+class Raft() extends Actor with LoggingFSM[Role, Meta] {
+  override def logDepth = 12
   startWith(Follower, Meta(List())) // TODO: move creation to function
 
   when(Follower) {
@@ -64,24 +65,26 @@ class Raft() extends Actor with FSM[Role, Meta] {
     case Event(Timeout, data) =>
       goto(Candidate) using preparedForCandidate(data)
   }
-  //
-  //  when(Candidate) {
-  //    // voting events  
-  //    case Event(rpc: RequestVote, data: Data) if rpc.candidateId == self =>
-  //      val (msg, updData) = grant(rpc, data)
-  //      stay using (updData) replying (msg)
-  //    case Event(GrantVote(term), data: Data) if hasMajorityVotes(data) =>
-  //      goto(Leader) using preparedForLeader(data)
-  //    case Event(GrantVote(term), data: Data) =>
-  //      stay using data.copy(votesReceived = sender :: data.votesReceived)
-  //
-  //    // other   
-  //    case Event(rpc: AppendEntries, data: Data) =>
-  //      goto(Follower) using data
-  //    case Event(Timeout, data: Data) =>
-  //      goto(Candidate) using preparedForCandidate(data)
-  //  }
-  //
+
+  when(Candidate) {
+    // voting events  
+    case Event(rpc: RequestVote, data: Meta) if rpc.candidateId == self =>
+      val (msg, updData) = grant(rpc, data)
+      stay using (updData) replying (msg)
+    case Event(GrantVote(term), data: Meta) =>
+      data.votes = data.votes.gotVoteFrom(sender)
+      if (data.votes.majority(data.nodes.length))
+        goto(Leader) using preparedForLeader(data)
+      else
+        stay using data
+
+    // other   
+    case Event(rpc: AppendEntries, data: Meta) =>
+      goto(Follower) using data
+    case Event(Timeout, data: Meta) =>
+      goto(Candidate) using preparedForCandidate(data)
+  }
+
   //  when(Leader) {
   //    case Event(clientRpc: ClientCommand, data: Data) =>
   //      val addedEntryData = appendLogEntry(clientRpc, data)
@@ -150,9 +153,6 @@ class Raft() extends Actor with FSM[Role, Meta] {
   //  private def appendLogEntry(rpc: ClientCommand, data: Data): Data =
   //    data.copy(log = data.log :+ LogEntry(rpc.command, data.currentTerm))
   //
-  //  private def hasMajorityVotes(d: Data) =
-  //    // adds 1 since just received vote is not included
-  //    ((d.votesReceived.length + 1) >= Math.ceil(d.nodes.length / 2.0))
 
   private def resetTimer = {
     cancelTimer("timeout")

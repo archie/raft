@@ -5,19 +5,23 @@ import org.scalatest._
 import akka.testkit._
 import scala.concurrent.duration._
 
-class FollowerSpec extends RaftSpec {
+class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
 
-  val follower = TestFSMRef(new Raft())
+  var default: Meta = _
+  var follower: TestFSMRef[Role, Meta, Raft] = _
+
+  override def beforeEach = {
+    default = Meta(
+      term = Term(2),
+      log = Log(List(probe.ref), List(LogEntry("a", 1), LogEntry("b", 2))),
+      rsm = totalOrdering,
+      nodes = List(probe.ref)
+    )
+    follower = TestFSMRef(new Raft())
+  }
 
   val probe = TestProbe()
   val totalOrdering = new TotalOrdering
-
-  val default = Meta(
-    term = Term(2),
-    log = Log(List(probe.ref), List(LogEntry("a", 1), LogEntry("b", 2))),
-    rsm = totalOrdering,
-    nodes = List(probe.ref)
-  )
 
   "a follower" must {
     "not append entries if requester's term is less than current term" in {
@@ -92,15 +96,16 @@ class FollowerSpec extends RaftSpec {
 
     "append multiple entries if previous log index and term match" in {
       follower.setState(Follower, default)
-      follower ! AppendEntries(
+      val probe = TestProbe()
+      probe.send(follower, AppendEntries(
         term = 3,
         leaderId = testActor,
         prevLogIndex = 1, // matches follower's last entry
         prevLogTerm = 2, // matches follower's last entry's term
         entries = List(LogEntry("op", 3), LogEntry("op2", 3)),
         leaderCommit = 0
-      )
-      expectMsg(AppendSuccess(3))
+      ))
+      probe.expectMsg(AppendSuccess(3))
       follower.stateData.log.entries must contain(LogEntry("op", 3))
       follower.stateData.log.entries.last must be(LogEntry("op2", 3))
     }
