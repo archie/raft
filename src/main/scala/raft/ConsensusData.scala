@@ -45,15 +45,26 @@ case class Votes(
 case class Log(
     entries: List[LogEntry],
     nextIndex: Map[Raft.NodeId, Int],
-    matchIndex: Map[Raft.NodeId, Int]) {
+    matchIndex: Map[Raft.NodeId, Int],
+    commitIndex: Int = 0) {
+
   def decrementNextFor(node: Raft.NodeId) =
     copy(nextIndex = nextIndex + (node -> (nextIndex(node) - 1)))
+
   def resetNextFor(node: Raft.NodeId, to: Int) =
     copy(nextIndex = nextIndex + (node -> to))
+
   def matchFor(node: Raft.NodeId, to: Option[Int] = None) = to match {
     case Some(toVal) => copy(matchIndex = matchIndex + (node -> toVal))
     case None => copy(matchIndex = matchIndex + (node -> (matchIndex(node) + 1)))
   }
+
+  def lastIndex = if (entries.length > 0) entries.length - 1 else 0
+
+  def lastTerm = if (entries.length > 0) entries.last.term else 1
+
+  def append(at: Int, incoming: List[LogEntry]) =
+    copy(entries = entries.take(at) ::: incoming)
 }
 
 object Log {
@@ -65,35 +76,38 @@ object Log {
   }
 }
 
-case class Meta[C[T]](
+case class Meta(
   var term: Term,
-  log: List[LogEntry], // TODO: Extract to Log class
-  rsm: ReplicatedStateMachine[C],
+  var log: Log,
+  rsm: TotalOrdering, // TODO: Make generic
   var nodes: List[Raft.NodeId],
   var requests: Requests = Requests(),
   var votes: Votes = Votes())
 
-/* state data */
-case class Data(
-    currentTerm: Raft.Term, // persisted all states
-    votedFor: Option[Raft.NodeId], // persisted all states
-    log: List[LogEntry], // persisted all states
-    commitIndex: Int, // volatile all states
-    lastApplied: Int, // volatile all states
-
-    // leaders only
-    nextIndex: Map[Raft.NodeId, Int] = Map(), // volatile
-    matchIndex: Map[Raft.NodeId, Int] = Map(), // volatile 
-    pendingRequests: Map[ClientRef, ClientRequest] = Map(), // volatile
-
-    // candidates only 
-    votesReceived: List[Raft.NodeId] = List(), // volatile
-
-    // config data
-    nodes: List[Raft.NodeId] = List() // persistent
-    ) {
-
+object Meta {
+  def apply(nodes: List[Raft.NodeId]): Meta =
+    Meta(Term(1), Log(nodes, List()), new TotalOrdering, nodes) // TODO: Lots
 }
+
+/* state data */
+//case class Data(
+//    currentTerm: Raft.Term, // persisted all states
+//    votedFor: Option[Raft.NodeId], // persisted all states
+//    log: List[LogEntry], // persisted all states
+//    commitIndex: Int, // volatile all states
+//    lastApplied: Int, // volatile all states
+//
+//    // leaders only
+//    nextIndex: Map[Raft.NodeId, Int] = Map(), // volatile
+//    matchIndex: Map[Raft.NodeId, Int] = Map(), // volatile 
+//    pendingRequests: Map[ClientRef, ClientRequest] = Map(), // volatile
+//
+//    // candidates only 
+//    votesReceived: List[Raft.NodeId] = List(), // volatile
+//
+//    // config data
+//    nodes: List[Raft.NodeId] = List() // persistent
+//    )
 
 object StateFactory {
 

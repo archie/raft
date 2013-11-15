@@ -10,28 +10,31 @@ class CandidateSpec extends RaftSpec {
 
   val candidate = TestFSMRef(new Raft())
 
-  val initialCandidateState = Data(
-    currentTerm = 3,
-    votedFor = None,
-    log = List(LogEntry("a", 2)),
-    commitIndex = 0,
-    lastApplied = 0,
-    nodes = List(testActor, testActor, testActor, testActor, candidate),
-    votesReceived = List())
+  val probes = (for (i <- List.range(0, 3)) yield TestProbe())
+  val allNodes = testActor :: candidate :: probes.map(_.ref)
+
+  val totalOrdering = new TotalOrdering
+
+  val initialCandidateState = Meta(
+    term = Term(3),
+    log = Log(allNodes, List(LogEntry("a", 1), LogEntry("b", 2))),
+    rsm = totalOrdering,
+    nodes = allNodes
+  )
 
   "when converting to a candidate it" must {
     "increase its term" in {
       candidate.setState(Follower, initialCandidateState) // reusing state
       candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
       Thread.sleep(40) // ensure timeout elapses
-      candidate.stateData.currentTerm must be(4)
+      candidate.stateData.term.current must be(4)
     }
 
     "vote for itself" in {
       candidate.setState(Follower, initialCandidateState) // reusing state
       candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
       Thread.sleep(40) // ensure timeout elapses
-      candidate.stateData.votesReceived must contain(candidate)
+      candidate.stateData.votes.received must contain(candidate)
     }
 
     "reset election timeout" in {
@@ -105,7 +108,7 @@ class CandidateSpec extends RaftSpec {
 
       // i.e., no messages are received within the timeout 
       candidate.stateName must be(Candidate)
-      candidate.stateData.currentTerm must be(initialCandidateState.currentTerm + 1)
+      candidate.stateData.term.current must be(initialCandidateState.term.current + 1)
     }
   }
 }

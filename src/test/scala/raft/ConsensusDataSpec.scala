@@ -11,7 +11,7 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
   val nextIndices = (for (i <- List.range(0, 5)) yield (TestProbe().ref, 3)).toMap
   val matchIndices = (for (i <- List.range(0, 5)) yield (TestProbe().ref, 0)).toMap
 
-  var state: Meta[Command] = _
+  var state: Meta = _
 
   //  state.term.current
   //  state.votes.received
@@ -19,7 +19,8 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
   //  state.log.*
   //  state.rsm.execute()
   val testRsm = new TotalOrdering
-  override def beforeEach = state = Meta(Term(1), List(), testRsm, nodes)
+  val entries = List(LogEntry("a", 1), LogEntry("b", 1))
+  override def beforeEach = state = Meta(Term(1), Log(nodes, entries), testRsm, nodes)
 
   "meta" must {
   }
@@ -60,7 +61,7 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
       val thisMeta = Meta(
         term = Term(1),
         votes = Votes(votedFor = Some(probe.ref)),
-        log = List(),
+        log = Log(nodes, entries),
         nodes = nodes,
         rsm = testRsm,
         requests = Requests())
@@ -110,12 +111,12 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
     }
     "decrement the next index for a follower if older log entries must be passed" in {
       val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)),
-        nextIndices, matchIndices)
+        nextIndices, matchIndices, 0)
       log.decrementNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(2)
     }
     "set the next index for a follower based on the last log entry sent" in {
       val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)),
-        nextIndices, matchIndices)
+        nextIndices, matchIndices, 0)
       log.resetNextFor(nextIndices.head._1, 60).nextIndex(nextIndices.head._1) must be(60)
     }
     "increase match index monotonically" in {
