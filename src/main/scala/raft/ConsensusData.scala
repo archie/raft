@@ -46,7 +46,8 @@ case class Log(
     entries: List[LogEntry],
     nextIndex: Map[Raft.NodeId, Int],
     matchIndex: Map[Raft.NodeId, Int],
-    commitIndex: Int = 0) {
+    commitIndex: Int = 0,
+    lastApplied: Int = 0) {
 
   def decrementNextFor(node: Raft.NodeId) =
     copy(nextIndex = nextIndex + (node -> (nextIndex(node) - 1)))
@@ -71,6 +72,8 @@ case class Log(
   }
 
   def commit(index: Int) = copy(commitIndex = index)
+
+  def applied = copy(lastApplied = lastApplied + 1)
 }
 
 object Log {

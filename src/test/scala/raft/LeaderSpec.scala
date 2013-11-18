@@ -266,7 +266,22 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
     }
 
     "apply committed entries" in {
-      pending
+      val leader = TestFSMRef(new Raft())
+      val state = stableLeaderState.copy()
+      state.log = Log(
+        entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2)),
+        nextIndex = probes.map(x => (x.ref, 3)).toMap,
+        matchIndex = probes.map(x => (x.ref, 2)).toMap,
+        commitIndex = 2,
+        lastApplied = 0
+      )
+      leader.setState(Leader, state)
+
+      // trigger
+      probes(0).send(leader, AppendSuccess(2, 2))
+
+      // test
+      leader.stateData.log.lastApplied must be(2)
     }
   }
 }

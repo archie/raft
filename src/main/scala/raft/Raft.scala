@@ -94,7 +94,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       data.log = data.log.resetNextFor(sender)
       data.log = data.log.matchFor(sender, Some(rpc.index))
       commitEntries(rpc, data)
-      // applyEntries()
+      applyEntries(data)
       stay
     case Event(rpc: AppendFailure, data: Meta) =>
       if (rpc.term <= data.term.current) {
@@ -150,6 +150,13 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   /*
    *  --- Internals ---
    */
+
+  private def applyEntries(data: Meta) = {
+    for (i <- data.log.lastApplied until data.log.commitIndex) {
+      // data.rsm.execute(command)
+      data.log = data.log.applied
+    }
+  }
 
   private def commitEntries(rpc: AppendSuccess, data: Meta) = {
     if (rpc.index > data.log.commitIndex &&

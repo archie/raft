@@ -106,12 +106,12 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
     }
     "decrement the next index for a follower if older log entries must be passed" in {
       val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)),
-        nextIndices, matchIndices, 0)
+        nextIndices, matchIndices, 0, 0)
       log.decrementNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(2)
     }
     "set the next index for a follower based on the last log entry sent" in {
       val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)),
-        nextIndices, matchIndices, 0)
+        nextIndices, matchIndices, 0, 0)
       log.resetNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(2)
     }
     "increase match index monotonically" in {
