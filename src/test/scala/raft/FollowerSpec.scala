@@ -76,7 +76,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
           entries = List(LogEntry("op", 3)),
           leaderCommit = 0
         )
-        expectMsg(AppendSuccess(3))
+        expectMsg(AppendSuccess(3, 2))
         follower.stateData.log.entries must not contain (LogEntry("remove", 2))
       }
 
@@ -90,7 +90,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
         entries = List(LogEntry("op", 3)),
         leaderCommit = 0
       )
-      expectMsg(AppendSuccess(3))
+      expectMsg(AppendSuccess(3, 2))
       follower.stateData.log.entries.last.entry must be("op")
     }
 
@@ -105,7 +105,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
         entries = List(LogEntry("op", 3), LogEntry("op2", 3)),
         leaderCommit = 0
       ))
-      probe.expectMsg(AppendSuccess(3))
+      probe.expectMsg(AppendSuccess(3, 3))
       follower.stateData.log.entries must contain(LogEntry("op", 3))
       follower.stateData.log.entries.last must be(LogEntry("op2", 3))
     }

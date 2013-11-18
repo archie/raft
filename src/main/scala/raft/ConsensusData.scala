@@ -51,8 +51,8 @@ case class Log(
   def decrementNextFor(node: Raft.NodeId) =
     copy(nextIndex = nextIndex + (node -> (nextIndex(node) - 1)))
 
-  def resetNextFor(node: Raft.NodeId, to: Int) =
-    copy(nextIndex = nextIndex + (node -> to))
+  def resetNextFor(node: Raft.NodeId) =
+    copy(nextIndex = nextIndex + (node -> entries.length))
 
   def matchFor(node: Raft.NodeId, to: Option[Int] = None) = to match {
     case Some(toVal) => copy(matchIndex = matchIndex + (node -> toVal))

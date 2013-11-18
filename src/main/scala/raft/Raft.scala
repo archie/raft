@@ -31,7 +31,7 @@ case class GrantVote(term: Raft.Term) extends Vote
 
 sealed trait AppendReply
 case class AppendFailure(term: Raft.Term) extends AppendReply
-case class AppendSuccess(term: Raft.Term) extends AppendReply
+case class AppendSuccess(term: Raft.Term, index: Int) extends AppendReply
 
 /* states */
 sealed trait Role
@@ -90,6 +90,10 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       createPendingRequest(sender, clientRpc, data)
       sendEntries(data)
       stay using data
+    case Event(rpc: AppendSuccess, data: Meta) =>
+      data.log = data.log.resetNextFor(sender)
+      data.log = data.log.matchFor(sender, Some(rpc.index))
+      stay
     case Event(rpc: AppendFailure, data: Meta) =>
       if (rpc.term <= data.term.current) {
         data.log = data.log.decrementNextFor(sender)
@@ -97,6 +101,8 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
         stay
       } else {
         data.term = Term(rpc.term)
+        data.requests = Requests()
+        data.votes = Votes()
         goto(Follower) using data
       }
     //      case Event(succs: AppendSuccess, d: Data) =>
@@ -212,7 +218,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     // to ensure property holds
     data.log = data.log.append(rpc.entries, Some(rpc.prevLogIndex + 1))
     data.term = Term.max(data.term, Term(rpc.term))
-    (AppendSuccess(data.term.current), data)
+    (AppendSuccess(data.term.current, data.log.lastIndex), data)
   }
 
   /*
