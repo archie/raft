@@ -75,8 +75,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       data.votes = data.votes.gotVoteFrom(sender)
       if (data.votes.majority(data.nodes.length))
         goto(Leader) using preparedForLeader(data)
-      else
-        stay using data
+      else stay using data
 
     // other   
     case Event(rpc: AppendEntries, data: Meta) =>
@@ -86,21 +85,19 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   }
 
   when(Leader) {
-    case Event(_, _) =>
-      stay
-    //      case Event(clientRpc: ClientCommand, data: Meta) =>
-    //        val addedEntryData = appendLogEntry(clientRpc, data)
-    //        val addedPendingRequest = createPendingRequest(sender, clientRpc, addedEntryData)
-    //        val appendEntriesMessage = AppendEntries(
-    //          term = addedPendingRequest.currentTerm,
-    //          leaderId = self,
-    //          prevLogIndex = lastIndex(addedPendingRequest),
-    //          prevLogTerm = lastTerm(addedPendingRequest),
-    //          entries = List(addedPendingRequest.log.last),
-    //          leaderCommit = addedPendingRequest.commitIndex
-    //        )
-    //        data.nodes.filterNot(_ == self).map(_ ! appendEntriesMessage)
-    //        stay using addedPendingRequest
+    case Event(clientRpc: ClientCommand, data: Meta) =>
+      writeToLog(clientRpc, data)
+      createPendingRequest(sender, clientRpc, data)
+      val appendEntriesMessage = AppendEntries(
+        term = data.term.current,
+        leaderId = self,
+        prevLogIndex = data.log.lastIndex,
+        prevLogTerm = data.log.lastTerm,
+        entries = data.log.entries.takeRight(1), // 1 == last entry
+        leaderCommit = data.log.commitIndex
+      )
+      data.nodes.filterNot(_ == self).map(_ ! appendEntriesMessage)
+      stay using data
     //      case Event(succs: AppendSuccess, d: Data) =>
     //         set pendingRequests((sender, succs.id)).successes += 1
     //         if majority(pendingRequests((sender, succs.id).successes)
@@ -145,16 +142,17 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
    *  --- Internals ---
    */
 
-  //  private def createPendingRequest(sender: ActorRef, rpc: ClientCommand, data: Data): Data = {
-  //    //d.pendingRequests += (uniqueId -> (clientRef, List()))
-  //    val uniqueId = ClientRef(sender, rpc.id)
-  //    val request = ClientRequest(rpc)
-  //    data.copy(pendingRequests = data.pendingRequests + (uniqueId -> request))
-  //  }
-  //
-  //  private def appendLogEntry(rpc: ClientCommand, data: Data): Data =
-  //    data.copy(log = data.log :+ LogEntry(rpc.command, data.currentTerm))
-  //
+  private def writeToLog(clientRpc: ClientCommand, data: Meta) = {
+    val entry = LogEntry(clientRpc.command, data.term.current) // TODO: only strings
+    data.log = data.log.append(data.log.lastIndex, List(entry))
+  }
+
+  private def createPendingRequest(sender: ActorRef,
+    clientRpc: ClientCommand, data: Meta) = {
+    val ref = ClientRef(sender, clientRpc.id)
+    val request = ClientRequest(clientRpc)
+    data.requests = data.requests.add(ref, request)
+  }
 
   private def resetTimer = {
     cancelTimer("timeout")
