@@ -91,9 +91,14 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       sendEntries(data)
       stay using data
     case Event(rpc: AppendFailure, data: Meta) =>
-      data.log = data.log.decrementNextFor(sender)
-      resendTo(sender, data)
-      stay
+      if (rpc.term <= data.term.current) {
+        data.log = data.log.decrementNextFor(sender)
+        resendTo(sender, data)
+        stay
+      } else {
+        data.term = Term(rpc.term)
+        goto(Follower) using data
+      }
     //      case Event(succs: AppendSuccess, d: Data) =>
     //         set pendingRequests((sender, succs.id)).successes += 1
     //         if majority(pendingRequests((sender, succs.id).successes)

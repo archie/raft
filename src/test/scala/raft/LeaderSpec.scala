@@ -154,6 +154,12 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       leader.stateData.log.nextIndex(probes(0).ref) must be(2)
     }
 
+    "convert to follower if term is higher in append failure" in {
+      leader.setState(Leader, stableLeaderState)
+      probes(0).send(leader, AppendFailure(5))
+      leader.stateName must be(Follower)
+    }
+
     "send previous entry if append failed" in {
       val nodes = probeGen(4)
       val state = Meta(
