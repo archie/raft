@@ -69,6 +69,8 @@ case class Log(
     case None => copy(entries = entries ::: incoming)
     case Some(pos) => copy(entries = entries.take(pos) ::: incoming)
   }
+
+  def commit(index: Int) = copy(commitIndex = index)
 }
 
 object Log {

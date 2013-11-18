@@ -187,13 +187,82 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       ))
     }
 
-    "commit entries" in {
+    "commit entries if majority exists" in {
       /*
 	     * if there exists an N such that N > commitIndex, a majority of 
 	     * matchIndex[i] >= N, and log[N].term == currentTerm: 
 	     *   set commitIndex = N
 	     */
-      pending
+
+      // Goal is to get a commit for N = 2, and we start one step from majority 
+
+      // 5-sized cluster
+      val probeA = TestProbe()
+      val probeB = TestProbe()
+      val probeC = TestProbe()
+      val probeD = TestProbe()
+
+      // set state
+      val entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))
+      val nextIndices = Map[Raft.NodeId, Int](
+        probeA.ref -> 3,
+        probeB.ref -> 3,
+        probeC.ref -> 3,
+        probeD.ref -> 3,
+        leader -> 3
+      )
+      val matchIndices = Map[Raft.NodeId, Int](
+        probeA.ref -> 2,
+        probeB.ref -> 2,
+        probeC.ref -> 0,
+        probeD.ref -> 0,
+        // impossible state, but want to make sure move is triggered by probes 
+        leader -> 0
+      )
+      stableLeaderState.nodes = List(probeA.ref, probeB.ref, probeC.ref, probeD.ref, leader)
+      stableLeaderState.log = Log(entries, nextIndices, matchIndices, 1)
+      leader.setState(Leader, stableLeaderState)
+
+      // trigger change
+      probeC.send(leader, AppendSuccess(2, 2))
+
+      // test
+      leader.stateData.log.commitIndex must be(2)
+    }
+
+    "do not commit entries if no majority exists" in {
+      // 5-sized cluster
+      val probeA = TestProbe()
+      val probeB = TestProbe()
+      val probeC = TestProbe()
+      val probeD = TestProbe()
+
+      // set state
+      val entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))
+      val nextIndices = Map[Raft.NodeId, Int](
+        probeA.ref -> 3,
+        probeB.ref -> 3,
+        probeC.ref -> 3,
+        probeD.ref -> 3,
+        leader -> 3
+      )
+      val matchIndices = Map[Raft.NodeId, Int](
+        probeA.ref -> 2,
+        probeB.ref -> 0,
+        probeC.ref -> 0,
+        probeD.ref -> 0,
+        // impossible state, but want to make sure move is triggered by probes 
+        leader -> 0
+      )
+      stableLeaderState.nodes = List(probeA.ref, probeB.ref, probeC.ref, probeD.ref, leader)
+      stableLeaderState.log = Log(entries, nextIndices, matchIndices, 1)
+      leader.setState(Leader, stableLeaderState)
+
+      // trigger change
+      probeC.send(leader, AppendSuccess(2, 2))
+
+      // test
+      leader.stateData.log.commitIndex must be(1)
     }
 
     "apply committed entries" in {
