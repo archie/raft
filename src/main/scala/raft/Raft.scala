@@ -92,6 +92,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       stay using data
     case Event(rpc: AppendFailure, data: Meta) =>
       data.log = data.log.decrementNextFor(sender)
+      resendTo(sender, data)
       stay
     //      case Event(succs: AppendSuccess, d: Data) =>
     //         set pendingRequests((sender, succs.id)).successes += 1
@@ -139,19 +140,28 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def sendEntries(data: Meta) = {
     data.nodes.filterNot(_ == self).map { node =>
-      val prevIndex = data.log.nextIndex(node) - 1
-      val prevTerm = data.log.termOf(prevIndex)
-      val fromMissing = data.log.lastIndex - prevIndex
-      val appendEntriesMessage = AppendEntries(
-        term = data.term.current,
-        leaderId = self,
-        prevLogIndex = prevIndex,
-        prevLogTerm = prevTerm,
-        entries = data.log.entries.takeRight(fromMissing),
-        leaderCommit = data.log.commitIndex
-      )
-      node ! appendEntriesMessage
+      val message = compileMessage(node, data)
+      node ! message
     }
+  }
+
+  private def resendTo(node: Raft.NodeId, data: Meta) = {
+    val message = compileMessage(node, data)
+    node ! message
+  }
+
+  private def compileMessage(node: ActorRef, data: Meta): AppendEntries = {
+    val prevIndex = data.log.nextIndex(node) - 1
+    val prevTerm = data.log.termOf(prevIndex)
+    val fromMissing = data.log.lastIndex - prevIndex
+    AppendEntries(
+      term = data.term.current,
+      leaderId = self,
+      prevLogIndex = prevIndex,
+      prevLogTerm = prevTerm,
+      entries = data.log.entries.takeRight(fromMissing),
+      leaderCommit = data.log.commitIndex
+    )
   }
 
   private def writeToLog(clientRpc: ClientCommand, data: Meta) = {

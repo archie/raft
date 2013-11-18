@@ -154,6 +154,26 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       leader.stateData.log.nextIndex(probes(0).ref) must be(2)
     }
 
+    "send previous entry if append failed" in {
+      val nodes = probeGen(4)
+      val state = Meta(
+        term = Term(2),
+        log = Log(nodes.map(_.ref), List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))),
+        rsm = totalOrdering,
+        nodes = nodes.map(_.ref)
+      )
+      leader.setState(Leader, state)
+      nodes(0).send(leader, AppendFailure(2))
+      nodes(0).expectMsg(AppendEntries(
+        term = 2,
+        leaderId = leader,
+        prevLogIndex = 1,
+        prevLogTerm = 2,
+        entries = List(LogEntry("c", 2)),
+        leaderCommit = 0
+      ))
+    }
+
     "commit entries" in {
       /*
 	     * if there exists an N such that N > commitIndex, a majority of 
