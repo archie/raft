@@ -63,6 +63,8 @@ case class Log(
 
   def lastTerm = if (entries.length > 0) entries.last.term else 1
 
+  def termOf(index: Int) = entries(index).term
+
   def append(at: Int, incoming: List[LogEntry]) =
     copy(entries = entries.take(at) ::: incoming)
 }

@@ -13,11 +13,6 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
 
   var state: Meta = _
 
-  //  state.term.current
-  //  state.votes.received
-  //  state.requests.pending
-  //  state.log.*
-  //  state.rsm.execute()
   val testRsm = new TotalOrdering
   val entries = List(LogEntry("a", 1), LogEntry("b", 1))
   override def beforeEach = state = Meta(Term(1), Log(nodes, entries), testRsm, nodes)
@@ -137,6 +132,10 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
       val entries = List(LogEntry("a", 1), LogEntry("b", 2))
       val nodes = for (n <- List.range(0, 5)) yield TestProbe().ref
       Log(nodes, entries).nextIndex(nodes(0)) must be(2)
+    }
+    "retrieve the term of a specified position in a log" in {
+      state.log.termOf(0) must be(1)
+      state.log.termOf(1) must be(1)
     }
   }
 
