@@ -66,7 +66,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
 
     "remove uncommitted entries if appending at a position" +
       "less than log length" in {
-        val longlog = default.copy(log = default.log.append(2, List(LogEntry("remove", 2))))
+        val longlog = default.copy(log = default.log.append(List(LogEntry("remove", 2)), Some(2)))
         follower.setState(Follower, longlog)
         follower ! AppendEntries(
           term = 3,
@@ -147,7 +147,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       //      then the log with the later term is more up to date. 
       //      If the logs end with the same term, then whichever log is 
       //      longer (i.e., logIndex) is more up to date.
-      val longlog = default.copy(log = default.log.append(2, List(LogEntry("c", 2))))
+      val longlog = default.copy(log = default.log.append(List(LogEntry("c", 2)), Some(2)))
       follower.setState(Follower, longlog)
       follower ! RequestVote(
         term = 2,

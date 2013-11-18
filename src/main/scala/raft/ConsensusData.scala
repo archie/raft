@@ -65,8 +65,10 @@ case class Log(
 
   def termOf(index: Int) = entries(index).term
 
-  def append(at: Int, incoming: List[LogEntry]) =
-    copy(entries = entries.take(at) ::: incoming)
+  def append(incoming: List[LogEntry], at: Option[Int] = None) = at match {
+    case None => copy(entries = entries ::: incoming)
+    case Some(pos) => copy(entries = entries.take(pos) ::: incoming)
+  }
 }
 
 object Log {

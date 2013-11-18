@@ -100,10 +100,43 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       // TODO: check if this test case is broken
     }
 
-    "send append entries rpc to follower if last log index is " +
-      "higher than or equal to follower's next log index" in {
-        pending
-      }
+    "send all missing log entries to follower" in {
+      // 3-sized cluster
+      val probeA = TestProbe()
+      val probeB = TestProbe()
+
+      // set state
+      val entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))
+      val nextIndices = Map[Raft.NodeId, Int](
+        probeA.ref -> 1, // is 2 entries behind
+        probeB.ref -> 2
+      )
+      val matchIndices = Map[Raft.NodeId, Int](probeA.ref -> 0, probeB.ref -> 0)
+      stableLeaderState.nodes = List(probeA.ref, probeB.ref)
+      stableLeaderState.log = Log(entries, nextIndices, matchIndices, 0)
+      leader.setState(Leader, stableLeaderState)
+
+      // trigger change
+      leader ! ClientCommand(100, "MONKEY")
+
+      // test
+      probeA.expectMsg(AppendEntries(
+        term = 2,
+        leaderId = leader,
+        prevLogIndex = 1, // verify
+        prevLogTerm = 2,
+        entries = List(LogEntry("c", 2), LogEntry("MONKEY", 2)),
+        leaderCommit = 0
+      ))
+      probeB.expectMsg(AppendEntries(
+        term = 2,
+        leaderId = leader,
+        prevLogIndex = 2,
+        prevLogTerm = 2,
+        entries = List(LogEntry("MONKEY", 2)),
+        leaderCommit = 0
+      ))
+    }
 
     "update next log index and match index for follower if successfull" +
       "append entries rpc" in {

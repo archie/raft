@@ -88,15 +88,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     case Event(clientRpc: ClientCommand, data: Meta) =>
       writeToLog(clientRpc, data)
       createPendingRequest(sender, clientRpc, data)
-      val appendEntriesMessage = AppendEntries(
-        term = data.term.current,
-        leaderId = self,
-        prevLogIndex = data.log.lastIndex,
-        prevLogTerm = data.log.lastTerm,
-        entries = data.log.entries.takeRight(1), // 1 == last entry
-        leaderCommit = data.log.commitIndex
-      )
-      data.nodes.filterNot(_ == self).map(_ ! appendEntriesMessage)
+      sendEntries(data)
       stay using data
     //      case Event(succs: AppendSuccess, d: Data) =>
     //         set pendingRequests((sender, succs.id)).successes += 1
@@ -142,9 +134,26 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
    *  --- Internals ---
    */
 
+  private def sendEntries(data: Meta) = {
+    data.nodes.filterNot(_ == self).map { node =>
+      val prevIndex = data.log.nextIndex(node)
+      val prevTerm = data.log.termOf(prevIndex)
+      val fromMissing = data.log.lastIndex - prevIndex
+      val appendEntriesMessage = AppendEntries(
+        term = data.term.current,
+        leaderId = self,
+        prevLogIndex = prevIndex,
+        prevLogTerm = prevTerm,
+        entries = data.log.entries.takeRight(fromMissing),
+        leaderCommit = data.log.commitIndex
+      )
+      node ! appendEntriesMessage
+    }
+  }
+
   private def writeToLog(clientRpc: ClientCommand, data: Meta) = {
     val entry = LogEntry(clientRpc.command, data.term.current) // TODO: only strings
-    data.log = data.log.append(data.log.lastIndex, List(entry))
+    data.log = data.log.append(List(entry))
   }
 
   private def createPendingRequest(sender: ActorRef,
@@ -183,7 +192,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     // if newer entries exist in log these are not committed and can 
     // safely be removed - should add check during exhaustive testing
     // to ensure property holds
-    data.log = data.log.append(rpc.prevLogIndex, rpc.entries)
+    data.log = data.log.append(rpc.entries, Some(rpc.prevLogIndex + 1))
     data.term = Term.max(data.term, Term(rpc.term))
     (AppendSuccess(data.term.current), data)
   }

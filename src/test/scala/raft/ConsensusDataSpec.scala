@@ -137,6 +137,19 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
       state.log.termOf(0) must be(1)
       state.log.termOf(1) must be(1)
     }
+    "append entry at the end of log if no index is given" in {
+      state.log = state.log.append(List(LogEntry("test", 2)))
+      state.log.entries.last must be(LogEntry("test", 2))
+    }
+    "append entry at a specified position" in {
+      state.log = state.log.append(List(LogEntry("test", 2)), Some(1))
+      state.log.entries(1) must be(LogEntry("test", 2))
+    }
+    "append entry at a specified position removing old entries" in {
+      state.log = state.log.append(List(LogEntry("test", 2)), Some(0))
+      state.log.entries(0) must be(LogEntry("test", 2))
+      state.log.entries must have length (1)
+    }
   }
 
   "replicated state machine" must {
