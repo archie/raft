@@ -136,7 +136,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def sendEntries(data: Meta) = {
     data.nodes.filterNot(_ == self).map { node =>
-      val prevIndex = data.log.nextIndex(node)
+      val prevIndex = data.log.nextIndex(node) - 1
       val prevTerm = data.log.termOf(prevIndex)
       val fromMissing = data.log.lastIndex - prevIndex
       val appendEntriesMessage = AppendEntries(

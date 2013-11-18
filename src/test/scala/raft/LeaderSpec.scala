@@ -69,11 +69,16 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
     }
 
     "broadcast AppendEntries rpc to all followers" in {
-      val probes = for (i <- List.range(0, 4)) yield TestProbe()
-      stableLeaderState.nodes = probes.map(_.ref)
-      leader.setState(Leader, stableLeaderState)
-      probes(0).send(leader, ClientCommand(100, "add"))
-      probes.map(_.expectMsg(AppendEntries(
+      val nodes = probeGen(4)
+      val state = Meta(
+        term = Term(2),
+        log = Log(nodes.map(_.ref), List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))),
+        rsm = totalOrdering,
+        nodes = nodes.map(_.ref)
+      )
+      leader.setState(Leader, state)
+      leader ! ClientCommand(100, "add")
+      nodes.map(_.expectMsg(AppendEntries(
         term = 2,
         leaderId = leader,
         prevLogIndex = 2,
@@ -108,8 +113,8 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       // set state
       val entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))
       val nextIndices = Map[Raft.NodeId, Int](
-        probeA.ref -> 1, // is 2 entries behind
-        probeB.ref -> 2
+        probeA.ref -> 2, // is 1 entry behind
+        probeB.ref -> 3
       )
       val matchIndices = Map[Raft.NodeId, Int](probeA.ref -> 0, probeB.ref -> 0)
       stableLeaderState.nodes = List(probeA.ref, probeB.ref)
