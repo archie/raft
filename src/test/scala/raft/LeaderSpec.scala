@@ -113,7 +113,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       // set state
       val entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))
       val nextIndices = Map[Raft.NodeId, Int](
-        probeA.ref -> 2, // is 1 entry behind
+        probeA.ref -> 2, // 2 means probeA is 1 entry behind
         probeB.ref -> 3
       )
       val matchIndices = Map[Raft.NodeId, Int](probeA.ref -> 0, probeB.ref -> 0)
@@ -149,7 +149,9 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       }
 
     "decrement next log index for follower if append entries fail" in {
-      pending
+      leader.setState(Leader, stableLeaderState)
+      probes(0).send(leader, AppendFailure(2))
+      leader.stateData.log.nextIndex(probes(0).ref) must be(2)
     }
 
     "commit entries" in {

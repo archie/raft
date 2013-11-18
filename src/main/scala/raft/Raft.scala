@@ -90,6 +90,9 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       createPendingRequest(sender, clientRpc, data)
       sendEntries(data)
       stay using data
+    case Event(rpc: AppendFailure, data: Meta) =>
+      data.log = data.log.decrementNextFor(sender)
+      stay
     //      case Event(succs: AppendSuccess, d: Data) =>
     //         set pendingRequests((sender, succs.id)).successes += 1
     //         if majority(pendingRequests((sender, succs.id).successes)
