@@ -100,10 +100,17 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
         data.votes = Votes()
         goto(Follower) using data
       }
+    case Event(Timeout, data: Meta) =>
+      sendEntries(data)
+      stay
   }
 
   whenUnhandled {
     case Event(_, _) => stay
+  }
+
+  onTransition {
+    case Leader -> Leader => resetTimer
   }
 
   private def preparedForCandidate(state: Meta): Meta = {
@@ -119,15 +126,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   }
 
   private def preparedForLeader(state: Meta) = {
-    state.nodes.map(node =>
-      node ! AppendEntries(
-        term = state.term.current,
-        leaderId = self,
-        prevLogIndex = state.log.lastIndex,
-        prevLogTerm = state.log.lastTerm,
-        entries = List(), // empty means NOOP
-        leaderCommit = state.log.commitIndex)
-    )
+    sendEntries(state)
     resetTimer
     state
   }
