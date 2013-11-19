@@ -14,6 +14,8 @@ object Raft {
 /* messages */
 sealed trait Message
 case object Timeout extends Message
+case object Heartbeat extends Message
+case class Init(nodes: List[Raft.NodeId]) extends Message
 
 sealed trait Request extends Message
 case class RequestVote(term: Raft.Term, candidateId: Raft.NodeId,
@@ -38,11 +40,17 @@ sealed trait Role
 case object Leader extends Role
 case object Follower extends Role
 case object Candidate extends Role
+case object Initialise extends Role
 
 /* Consensus module */
 class Raft() extends Actor with LoggingFSM[Role, Meta] {
   override def logDepth = 12
-  startWith(Follower, Meta(List())) // TODO: move creation to function
+
+  startWith(Initialise, Meta(List()))
+
+  when(Initialise) {
+    case Event(cluster: Init, _) => goto(Follower) using initialised(cluster)
+  }
 
   when(Follower) {
     case Event(rpc: RequestVote, data) =>
@@ -100,17 +108,21 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
         data.votes = Votes()
         goto(Follower) using data
       }
-    case Event(Timeout, data: Meta) =>
+    case Event(Heartbeat, data: Meta) =>
       sendEntries(data)
       stay
   }
 
   whenUnhandled {
-    case Event(_, _) => stay
+    case Event(_, _) => stay // drop event
+  }
+
+  private def initialised(cluster: Init): Meta = {
+    Meta(cluster.nodes)
   }
 
   onTransition {
-    case Leader -> Leader => resetTimer
+    case Leader -> Leader => resetHeartbeatTimer
   }
 
   private def preparedForCandidate(state: Meta): Meta = {
@@ -127,7 +139,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def preparedForLeader(state: Meta) = {
     sendEntries(state)
-    resetTimer
+    resetHeartbeatTimer
     state
   }
 
@@ -191,6 +203,12 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     val ref = ClientRef(sender, rpc.cid)
     val entry = LogEntry(rpc.command, data.term.current, Some(ref))
     data.log = data.log.append(List(entry))
+  }
+
+  private def resetHeartbeatTimer = {
+    cancelTimer("heartbeat")
+    // TODO: should pick random time less than Timeout random
+    setTimer("heartbeat", Heartbeat, 150 millis, false)
   }
 
   private def resetTimer = {

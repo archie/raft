@@ -47,7 +47,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       leader.setState(Candidate, exitCandidateState)
       leader ! GrantVote(2) // makes candidate become leader
       Thread.sleep(20)
-      leader.isTimerActive("timeout") must be(true)
+      leader.isTimerActive("heartbeat") must be(true)
     }
   }
 
