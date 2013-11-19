@@ -59,16 +59,15 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
 
   "a candidate" must {
     "become leader if receiving grants from a majority of servers" in {
-      val cand = TestFSMRef(new Raft())
-      cand.setState(Candidate, initialCandidateState)
+      candidate.setState(Candidate, initialCandidateState)
 
       for (i <- List.range(0, 4)) // excluding candidate  
         yield actor(new Act {
-        whenStarting { cand ! GrantVote(3) }
+        whenStarting { candidate ! GrantVote(3) }
       })
 
       Thread.sleep(50) // give candidate time to receive and parse messages
-      cand.stateName must be(Leader)
+      candidate.stateName must be(Leader)
     }
 
     "remain a candidate if the majority vote is not yet received" in {

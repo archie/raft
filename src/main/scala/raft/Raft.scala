@@ -95,6 +95,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       data.log = data.log.matchFor(sender, Some(rpc.index))
       commitEntries(rpc, data)
       applyEntries(data)
+      // send results?
       stay
     case Event(rpc: AppendFailure, data: Meta) =>
       if (rpc.term <= data.term.current) {
@@ -107,12 +108,6 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
         data.votes = Votes()
         goto(Follower) using data
       }
-    //      case Event(succs: AppendSuccess, d: Data) =>
-    //         set pendingRequests((sender, succs.id)).successes += 1
-    //         if majority(pendingRequests((sender, succs.id).successes)
-    //         	then result = statem.apply(pendingRequests((sender, succs.id)).command)
-    //            and clientRef ! result
-    //        stay
   }
 
   whenUnhandled {
