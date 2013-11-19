@@ -54,14 +54,9 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
   "when receiving a client command a leader" must {
     "append entry to its local log" in {
       leader.setState(Leader, stableLeaderState)
-      probes(0).send(leader, ClientCommand(100, "add"))
-      leader.stateData.log.entries must contain(LogEntry("add", 2)) // 2 == currentTerm
-    }
-
-    "create a pending client request" in {
-      leader.setState(Leader, stableLeaderState)
-      probes(0).send(leader, ClientCommand(100, "add"))
-      leader.stateData.requests.pending must contain key (ClientRef(probes(0).ref, 100))
+      probes(0).send(leader, ClientRequest(100, "add"))
+      leader.stateData.log.entries must contain(LogEntry("add", 2,
+        Some(ClientRef(probes(0).ref, 100)))) // 2 == currentTerm
     }
 
     "respond to client after entry is applied to state machine" in {
@@ -77,13 +72,13 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
         nodes = nodes.map(_.ref)
       )
       leader.setState(Leader, state)
-      leader ! ClientCommand(100, "add")
+      leader ! ClientRequest(100, "add")
       nodes.map(_.expectMsg(AppendEntries(
         term = 2,
         leaderId = leader,
         prevLogIndex = 2,
         prevLogTerm = 2,
-        entries = List(LogEntry("add", 2)),
+        entries = List(LogEntry("add", 2, Some(ClientRef(testActor, 100)))),
         leaderCommit = 0
       )))
     }
@@ -122,15 +117,16 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       leader.setState(Leader, stableLeaderState)
 
       // trigger change
-      leader ! ClientCommand(100, "MONKEY")
+      leader ! ClientRequest(100, "monkey")
 
+      val ref = Some(ClientRef(testActor, 100))
       // test
       probeA.expectMsg(AppendEntries(
         term = 2,
         leaderId = leader,
         prevLogIndex = 1, // verify
         prevLogTerm = 2,
-        entries = List(LogEntry("c", 2), LogEntry("MONKEY", 2)),
+        entries = List(LogEntry("c", 2), LogEntry("monkey", 2, ref)),
         leaderCommit = 0
       ))
       probeB.expectMsg(AppendEntries(
@@ -138,7 +134,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
         leaderId = leader,
         prevLogIndex = 2,
         prevLogTerm = 2,
-        entries = List(LogEntry("MONKEY", 2)),
+        entries = List(LogEntry("monkey", 2, ref)),
         leaderCommit = 0
       ))
     }

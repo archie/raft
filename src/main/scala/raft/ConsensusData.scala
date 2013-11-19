@@ -14,11 +14,6 @@ object Term {
     else t2
 }
 
-case class Requests(pending: Map[ClientRef, ClientRequest] = Map()) {
-  def add(ref: ClientRef, req: ClientRequest) = this.copy(pending = pending + (ref -> req))
-  def remove(ref: ClientRef) = this.copy(pending = pending - ref)
-}
-
 case class Votes(
     votedFor: Option[Raft.NodeId] = None,
     received: List[Raft.NodeId] = List()) {
@@ -30,6 +25,10 @@ case class Votes(
     case None => copy(votedFor = Some(ref)) // TODO: Persist this value before returning
   }
 }
+
+// this might go elsewhere later
+case class LogEntry(entry: String, term: Raft.Term,
+  sender: Option[ClientRef] = None)
 
 case class Log(
     entries: List[LogEntry],
@@ -79,7 +78,6 @@ case class Meta(
   var log: Log,
   rsm: TotalOrdering, // TODO: Make generic
   var nodes: List[Raft.NodeId],
-  var requests: Requests = Requests(),
   var votes: Votes = Votes())
 
 object Meta {

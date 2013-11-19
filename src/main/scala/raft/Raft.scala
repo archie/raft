@@ -11,9 +11,6 @@ object Raft {
   type NodeId = ActorRef
 }
 
-// this might go elsewhere later
-case class LogEntry(entry: String, term: Raft.Term)
-
 /* messages */
 sealed trait Message
 case object Timeout extends Message
@@ -25,24 +22,22 @@ case class AppendEntries(term: Raft.Term, leaderId: Raft.NodeId,
   prevLogIndex: Int, prevLogTerm: Raft.Term, entries: List[LogEntry],
   leaderCommit: Int) extends Request
 
-sealed trait Vote
+sealed trait Vote extends Message
 case class DenyVote(term: Raft.Term) extends Vote
 case class GrantVote(term: Raft.Term) extends Vote
 
-sealed trait AppendReply
+sealed trait AppendReply extends Message
 case class AppendFailure(term: Raft.Term) extends AppendReply
 case class AppendSuccess(term: Raft.Term, index: Int) extends AppendReply
+
+case class ClientRequest(cid: Int, command: String)
+case class ClientRef(sender: Raft.NodeId, cid: Int)
 
 /* states */
 sealed trait Role
 case object Leader extends Role
 case object Follower extends Role
 case object Candidate extends Role
-
-/* Client messages and data */
-case class ClientCommand(id: Int, command: String) extends Message
-case class ClientRef(client: ActorRef, cid: Int)
-case class ClientRequest(command: ClientCommand, successes: Int = 0)
 
 /* Consensus module */
 class Raft() extends Actor with LoggingFSM[Role, Meta] {
@@ -85,9 +80,9 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   }
 
   when(Leader) {
-    case Event(clientRpc: ClientCommand, data: Meta) =>
-      writeToLog(clientRpc, data)
-      createPendingRequest(sender, clientRpc, data)
+    case Event(clientRpc: ClientRequest, data: Meta) =>
+      writeToLog(sender, clientRpc, data)
+      //createPendingRequest(sender, clientRpc, data)
       sendEntries(data)
       stay using data
     case Event(rpc: AppendSuccess, data: Meta) =>
@@ -104,7 +99,6 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
         stay
       } else {
         data.term = Term(rpc.term)
-        data.requests = Requests()
         data.votes = Votes()
         goto(Follower) using data
       }
@@ -188,16 +182,10 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     )
   }
 
-  private def writeToLog(clientRpc: ClientCommand, data: Meta) = {
-    val entry = LogEntry(clientRpc.command, data.term.current) // TODO: only strings
+  private def writeToLog(sender: Raft.NodeId, rpc: ClientRequest, data: Meta) = {
+    val ref = ClientRef(sender, rpc.cid)
+    val entry = LogEntry(rpc.command, data.term.current, Some(ref))
     data.log = data.log.append(List(entry))
-  }
-
-  private def createPendingRequest(sender: ActorRef,
-    clientRpc: ClientCommand, data: Meta) = {
-    val ref = ClientRef(sender, clientRpc.id)
-    val request = ClientRequest(clientRpc)
-    data.requests = data.requests.add(ref, request)
   }
 
   private def resetTimer = {

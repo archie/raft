@@ -58,28 +58,10 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
         votes = Votes(votedFor = Some(probe.ref)),
         log = Log(nodes, entries),
         nodes = nodes,
-        rsm = testRsm,
-        requests = Requests())
+        rsm = testRsm)
       state.votes = state.votes.vote(probe.ref)
       state must be(thisMeta)
       state.votes.vote(TestProbe().ref) must be(Votes(votedFor = Some(probe.ref)))
-    }
-  }
-
-  "client requests" must {
-    "store pending requests" in {
-      val r1 = Requests()
-      val request = ClientRequest(ClientCommand(100, "add"))
-      val ref = ClientRef(probe.ref, 100)
-      val r2 = r1.add(ref, request)
-      r2.pending must contain key (ref)
-    }
-    "be able to delete requests that have been replied to" in {
-      val request = ClientRequest(ClientCommand(100, "add"), 2)
-      val ref = ClientRef(probe.ref, 100)
-      val r1 = Requests(Map(ref -> request))
-      val r2 = r1.remove(ref)
-      r2.pending must not contain key(ref)
     }
   }
 
