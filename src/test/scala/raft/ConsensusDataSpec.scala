@@ -74,20 +74,6 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
       val r2 = r1.add(ref, request)
       r2.pending must contain key (ref)
     }
-    "increase append success count per request" in {
-      val request = ClientRequest(ClientCommand(100, "add"))
-      val ref = ClientRef(probe.ref, 100)
-      val r1 = Requests(Map(ref -> request))
-      val r2 = r1.tick(ref)
-      r2.pending(ref).successes must be(1)
-    }
-    "check if majority has been reached per request" in {
-      val request = ClientRequest(ClientCommand(100, "add"), 2)
-      val ref = ClientRef(probe.ref, 100)
-      val r1 = Requests(Map(ref -> request))
-      r1.majority(ref, 5) must be(false)
-      r1.majority(ref, 3) must be(true)
-    }
     "be able to delete requests that have been replied to" in {
       val request = ClientRequest(ClientCommand(100, "add"), 2)
       val ref = ClientRef(probe.ref, 100)
@@ -98,12 +84,6 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
   }
 
   "a log" must {
-    "maintain a next index for each follower" in {
-      //      val nodes = for (i <- List.range(0, 5)) yield (TestProbe().ref, 0)
-      //      val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)), nodes.toMap)
-      //      for (value <- log.nextIndex.values) yield value must be(3)
-      pending
-    }
     "decrement the next index for a follower if older log entries must be passed" in {
       val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)),
         nextIndices, matchIndices, 0, 0)
