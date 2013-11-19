@@ -91,7 +91,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
         leaderCommit = 0
       )
       expectMsg(AppendSuccess(3, 2))
-      follower.stateData.log.entries.last.entry must be("op")
+      follower.stateData.log.entries.last.command must be("op")
     }
 
     "append multiple entries if previous log index and term match" in {

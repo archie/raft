@@ -82,7 +82,6 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   when(Leader) {
     case Event(clientRpc: ClientRequest, data: Meta) =>
       writeToLog(sender, clientRpc, data)
-      //createPendingRequest(sender, clientRpc, data)
       sendEntries(data)
       stay using data
     case Event(rpc: AppendSuccess, data: Meta) =>
@@ -90,7 +89,6 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       data.log = data.log.matchFor(sender, Some(rpc.index))
       commitEntries(rpc, data)
       applyEntries(data)
-      // send results?
       stay
     case Event(rpc: AppendFailure, data: Meta) =>
       if (rpc.term <= data.term.current) {
@@ -142,7 +140,15 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def applyEntries(data: Meta) = {
     for (i <- data.log.lastApplied until data.log.commitIndex) {
-      // data.rsm.execute(command)
+      val entry = data.log.entries(i)
+
+      val result = data.rsm.execute(Get) // TODO: make generic
+
+      entry.sender match {
+        case Some(ref) => ref.sender ! (ref.cid, result)
+        case None => // ignore
+      }
+
       data.log = data.log.applied
     }
   }

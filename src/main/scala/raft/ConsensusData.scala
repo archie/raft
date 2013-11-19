@@ -27,7 +27,7 @@ case class Votes(
 }
 
 // this might go elsewhere later
-case class LogEntry(entry: String, term: Raft.Term,
+case class LogEntry(command: String, term: Raft.Term,
   sender: Option[ClientRef] = None)
 
 case class Log(
