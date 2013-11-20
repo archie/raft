@@ -71,24 +71,34 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       val (msg, upd) = append(rpc, data)
       stay using upd replying msg
     case Event(Timeout, data) =>
+      log.debug("\n == WAITED LONG ENOUGH, NO LEADER IN SIGHT")
       goto(Candidate) using preparedForCandidate(data)
   }
 
   when(Candidate) {
-    // voting events  
-    case Event(rpc: RequestVote, data: Meta) if rpc.candidateId == self =>
-      val (msg, updData) = grant(rpc, data)
-      stay using (updData) replying (msg)
+    // voting events   
+    case Event(rpc: RequestVote, data) if (rpc.term == data.term.current) =>
+      val (msg, upd) = grant(rpc, data)
+      stay using (upd) replying msg
     case Event(GrantVote(term), data: Meta) =>
       data.votes = data.votes.gotVoteFrom(sender)
-      if (data.votes.majority(data.nodes.length))
+
+      if (data.votes.majority(data.nodes.length)) {
+        log.debug("\n == GOT MAJORITY, BECOMING LEADER")
         goto(Leader) using preparedForLeader(data)
-      else stay using data
+      } else stay using data
+
+    case Event(DenyVote(term), data: Meta) =>
+      if (term > data.term.current)
+        goto(Follower) using preparedForFollower(data)
+      else stay
 
     // other   
     case Event(rpc: AppendEntries, data: Meta) =>
-      goto(Follower) using data
+      log.debug("\n STEPPING DOWN for " + sender)
+      goto(Follower) using preparedForFollower(data)
     case Event(Timeout, data: Meta) =>
+      log.debug("\n == WAITED LONG ENOUGH, STILL NO LEADER")
       goto(Candidate) using preparedForCandidate(data)
   }
 
@@ -110,8 +120,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
         stay
       } else {
         data.term = Term(rpc.term)
-        data.votes = Votes()
-        goto(Follower) using data
+        goto(Follower) using preparedForFollower(data)
       }
     case Event(Heartbeat, data: Meta) =>
       sendEntries(data)
@@ -122,23 +131,38 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     case Event(_, _) => stay // drop event
   }
 
-  private def initialised(cluster: Init): Meta = {
-    Meta(cluster.nodes)
+  onTransition {
+    case Leader -> Follower =>
+      cancelTimer("heartbeat")
+      resetTimer
+    case Candidate -> Follower => resetTimer
+    case Initialise -> Follower => resetTimer
   }
 
-  onTransition {
-    case Leader -> Leader => resetHeartbeatTimer
-    case Initialise -> Follower => resetTimer
+  onTermination {
+    case StopEvent(FSM.Normal, state, data) =>
+      log.debug("\n == SHUTTING DOWN: NORMAL")
+    case StopEvent(FSM.Shutdown, state, data) =>
+      log.debug("\n == SHUTTING DOWN: SHUTDOWN")
+    case StopEvent(FSM.Failure(cause), state, data) =>
+      log.debug("\n == SHUTTING DOWN: FAILURE")
+  }
+
+  private def preparedForFollower(state: Meta): Meta = {
+    state.votes = Votes()
+    state
   }
 
   private def preparedForCandidate(state: Meta): Meta = {
     state.term = state.term.nextTerm
-    state.nodes.map(t => t ! RequestVote(
-      term = state.term.current,
-      candidateId = self,
-      lastLogIndex = state.log.lastIndex,
-      lastLogTerm = state.log.lastTerm
-    ))
+    state.nodes.map { t =>
+      t ! RequestVote(
+        term = state.term.current,
+        candidateId = self,
+        lastLogIndex = state.log.lastIndex,
+        lastLogTerm = state.log.lastTerm)
+      log.debug("\n == REQUESTING VOTE FROM " + t)
+    }
     resetTimer
     state
   }
@@ -147,6 +171,20 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     sendEntries(state)
     resetHeartbeatTimer
     state
+  }
+
+  private def initialised(cluster: Init): Meta = Meta(cluster.nodes)
+
+  private def resetHeartbeatTimer = {
+    cancelTimer("heartbeat")
+    val nextTimeout = (random * 100).toInt + 100
+    setTimer("heartbeat", Heartbeat, nextTimeout millis, false)
+  }
+
+  private def resetTimer = {
+    cancelTimer("timeout")
+    val nextTimeout = (random * 200).toInt + 200
+    setTimer("timeout", Timeout, nextTimeout millis, false) // TODO: should pick random time
   }
 
   initialize() // akka specific
@@ -180,9 +218,11 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   }
 
   private def sendEntries(data: Meta) = {
+    resetHeartbeatTimer
     data.nodes.filterNot(_ == self).map { node =>
       val message = compileMessage(node, data)
       node ! message
+      log.debug("\n == SENT MESSAGE TO: " + node)
     }
   }
 
@@ -209,18 +249,6 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     val ref = ClientRef(sender, rpc.cid)
     val entry = LogEntry(rpc.command, data.term.current, Some(ref))
     data.log = data.log.append(List(entry))
-  }
-
-  private def resetHeartbeatTimer = {
-    cancelTimer("heartbeat")
-    // TODO: should pick random time less than Timeout random
-    setTimer("heartbeat", Heartbeat, 150 millis, false)
-  }
-
-  private def resetTimer = {
-    cancelTimer("timeout")
-    val nextTimeout = (random * 100).toInt + 200
-    setTimer("timeout", Timeout, nextTimeout millis, false) // TODO: should pick random time
   }
 
   /*
@@ -271,6 +299,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   private def grant(rpc: RequestVote, data: Meta): (Vote, Meta) = {
     data.votes = data.votes.vote(rpc.candidateId)
     data.term = Term.max(data.term, Term(rpc.term))
+    log.debug("\n == VOTING FOR " + rpc.candidateId)
     (GrantVote(data.term.current), data)
   }
 

@@ -18,8 +18,10 @@ case class Votes(
     votedFor: Option[Raft.NodeId] = None,
     received: List[Raft.NodeId] = List()) {
   def gotVoteFrom(ref: ActorRef): Votes = this.copy(received = ref :: received)
+
   def majority(size: Int): Boolean =
     (this.received.length >= Math.ceil(size / 2.0))
+
   def vote(ref: Raft.NodeId) = votedFor match {
     case Some(vote) => this
     case None => copy(votedFor = Some(ref)) // TODO: Persist this value before returning
