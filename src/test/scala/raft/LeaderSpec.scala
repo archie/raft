@@ -43,6 +43,23 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       probes.map(x => x.expectMsg(message))
     }
 
+    "send heartbeat even if there are no previous entries in log" in {
+      val probes = probeGen(4)
+      val nodes = leader :: probes.map(_.ref)
+      val state = Meta(
+        term = Term(2),
+        log = Log(nodes, List()),
+        rsm = totalOrdering,
+        nodes = nodes,
+        votes = Votes(received = List(leader, nodes(2))) // just before majority
+      )
+      leader.setState(Candidate, state)
+      probes(0).send(leader, GrantVote(2)) // makes candidate become leader
+      Thread.sleep(30)
+      val message = AppendEntries(2, leader, 0, 1, List(), 0)
+      probes.map(x => x.expectMsg(message))
+    }
+
     "have heartbeat timer set" in {
       leader.setState(Candidate, exitCandidateState)
       leader ! GrantVote(2) // makes candidate become leader

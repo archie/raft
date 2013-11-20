@@ -52,7 +52,11 @@ case class Log(
 
   def lastTerm = if (entries.length > 0) entries.last.term else 1
 
-  def termOf(index: Int) = entries(index).term
+  def termOf(index: Int) =
+    if (entries.length > 0) entries(index).term else 1
+
+  def prevIndex(node: Raft.NodeId) =
+    if (nextIndex(node) > 0) nextIndex(node) - 1 else 0
 
   def append(incoming: List[LogEntry], at: Option[Int] = None) = at match {
     case None => copy(entries = entries ::: incoming)

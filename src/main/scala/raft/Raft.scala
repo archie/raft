@@ -4,6 +4,7 @@ import scala.language.postfixOps
 import akka.actor.{ Actor, ActorRef, FSM, LoggingFSM }
 import scala.concurrent.duration._
 import scala.concurrent.Promise
+import math.random
 
 /* types */
 object Raft {
@@ -20,8 +21,12 @@ case class Init(nodes: List[Raft.NodeId]) extends Message
 sealed trait Request extends Message
 case class RequestVote(term: Raft.Term, candidateId: Raft.NodeId,
   lastLogIndex: Int, lastLogTerm: Raft.Term) extends Request
-case class AppendEntries(term: Raft.Term, leaderId: Raft.NodeId,
-  prevLogIndex: Int, prevLogTerm: Raft.Term, entries: List[LogEntry],
+case class AppendEntries(
+  term: Raft.Term,
+  leaderId: Raft.NodeId,
+  prevLogIndex: Int,
+  prevLogTerm: Raft.Term,
+  entries: List[LogEntry],
   leaderCommit: Int) extends Request
 
 sealed trait Vote extends Message
@@ -123,6 +128,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   onTransition {
     case Leader -> Leader => resetHeartbeatTimer
+    case Initialise -> Follower => resetTimer
   }
 
   private def preparedForCandidate(state: Meta): Meta = {
@@ -186,7 +192,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   }
 
   private def compileMessage(node: ActorRef, data: Meta): AppendEntries = {
-    val prevIndex = data.log.nextIndex(node) - 1
+    val prevIndex = data.log.prevIndex(node)
     val prevTerm = data.log.termOf(prevIndex)
     val fromMissing = data.log.lastIndex - prevIndex
     AppendEntries(
@@ -213,7 +219,8 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def resetTimer = {
     cancelTimer("timeout")
-    setTimer("timeout", Timeout, 200 millis, false) // TODO: should pick random time
+    val nextTimeout = (random * 100).toInt + 200
+    setTimer("timeout", Timeout, nextTimeout millis, false) // TODO: should pick random time
   }
 
   /*
