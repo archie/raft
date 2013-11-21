@@ -94,6 +94,58 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       follower.stateData.log.entries.last.command must be("op")
     }
 
+    "append NOOP entries" in {
+      follower.setState(Follower, default)
+      follower ! AppendEntries(
+        term = 3,
+        leaderId = testActor,
+        prevLogIndex = 1,
+        prevLogTerm = 2,
+        entries = List(),
+        leaderCommit = 0
+      )
+      expectMsg(AppendSuccess(3, 1))
+      follower.stateData.log.entries.last.command must be("b")
+    }
+
+    "append NOOP entries when log is empty (i.e., bootstrap)" in {
+      val empty = Meta(
+        term = Term(1),
+        log = Log(List(probe.ref), List()),
+        rsm = totalOrdering,
+        nodes = List(probe.ref)
+      )
+      follower.setState(Follower, empty)
+      follower ! AppendEntries(
+        term = 2,
+        leaderId = testActor,
+        prevLogIndex = 0,
+        prevLogTerm = 1,
+        entries = List(),
+        leaderCommit = 0
+      )
+      expectMsg(AppendSuccess(2, 0))
+    }
+
+    "append NOOP entries when log is empty in same term" in {
+      val empty = Meta(
+        term = Term(50),
+        log = Log(List(probe.ref), List()),
+        rsm = totalOrdering,
+        nodes = List(probe.ref)
+      )
+      follower.setState(Follower, empty)
+      follower ! AppendEntries(
+        term = 50,
+        leaderId = testActor,
+        prevLogIndex = 0,
+        prevLogTerm = 1,
+        entries = List(),
+        leaderCommit = 0
+      )
+      expectMsg(AppendSuccess(50, 0))
+    }
+
     "append multiple entries if previous log index and term match" in {
       follower.setState(Follower, default)
       val probe = TestProbe()

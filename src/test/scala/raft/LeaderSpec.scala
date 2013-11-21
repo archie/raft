@@ -106,17 +106,6 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       pending
     }
 
-    "reschedule a heartbeat if an append entries rpc call is made" in {
-      //      leader.setState(Leader, stableLeaderState)
-      //      leader.setTimer("timeout", Timeout, 100 millis, false)
-      //      Thread.sleep(80)
-      //      leader ! ClientCommand(100, "add")
-      //      Thread.sleep(80) // 80+50 is enough to cause timeout
-      //      leader.isTimerActive("timeout")
-      pending
-      // TODO: check if this test case is broken
-    }
-
     "send all missing log entries to follower" in {
       // 3-sized cluster
       val probeA = TestProbe()

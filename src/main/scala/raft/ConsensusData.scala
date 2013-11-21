@@ -32,6 +32,7 @@ case class Votes(
 case class LogEntry(command: String, term: Raft.Term,
   sender: Option[ClientRef] = None)
 
+// This needs serious refactoring, zero-indexed log is causing a lot of pain
 case class Log(
     entries: List[LogEntry],
     nextIndex: Map[Raft.NodeId, Int],
