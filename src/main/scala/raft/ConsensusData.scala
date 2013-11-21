@@ -28,90 +28,33 @@ case class Votes(
   }
 }
 
-// this might go elsewhere later
-case class LogEntry(command: String, term: Raft.Term,
-  sender: Option[ClientRef] = None)
-
-// This needs serious refactoring, zero-indexed log is causing a lot of pain
-case class Log(
-    entries: List[LogEntry],
-    nextIndex: Map[Raft.NodeId, Int],
-    matchIndex: Map[Raft.NodeId, Int],
-    commitIndex: Int = 0,
-    lastApplied: Int = 0) {
-
-  def decrementNextFor(node: Raft.NodeId) =
-    copy(nextIndex = nextIndex + (node -> (nextIndex(node) - 1)))
-
-  def resetNextFor(node: Raft.NodeId) =
-    copy(nextIndex = nextIndex + (node -> entries.length))
-
-  def matchFor(node: Raft.NodeId, to: Option[Int] = None) = to match {
-    case Some(toVal) => copy(matchIndex = matchIndex + (node -> toVal))
-    case None => copy(matchIndex = matchIndex + (node -> (matchIndex(node) + 1)))
-  }
-
-  def lastIndex = if (entries.length > 0) entries.length - 1 else 0
-
-  def lastTerm = if (entries.length > 0) entries.last.term else 1
-
-  def termOf(index: Int) =
-    if (entries.length > 0) entries(index).term else 1
-
-  def prevIndex(node: Raft.NodeId) =
-    if (nextIndex(node) > 0) nextIndex(node) - 1 else 0
-
-  def append(incoming: List[LogEntry], at: Option[Int] = None) = at match {
-    case None => copy(entries = entries ::: incoming)
-    case Some(pos) => copy(entries = entries.take(pos) ::: incoming)
-  }
-
-  def commit(index: Int) = copy(commitIndex = index)
-
-  def applied = copy(lastApplied = lastApplied + 1)
-}
-
-object Log {
-  def apply(nodes: List[Raft.NodeId], entries: List[LogEntry]): Log = {
-    val nextIndex = entries.length
-    val nextIndices = (for (n <- nodes) yield (n -> nextIndex)).toMap
-    val matchIndices = (for (n <- nodes) yield (n -> 0)).toMap
-    Log(entries, nextIndices, matchIndices)
-  }
-}
-
 case class Meta(
-  var term: Term,
-  var log: Log,
-  rsm: TotalOrdering, // TODO: Make generic
-  var nodes: List[Raft.NodeId],
-  var votes: Votes = Votes())
+    var term: Term,
+    var log: Log,
+    rsm: TotalOrdering, // TODO: Make generic
+    var nodes: List[Raft.NodeId],
+    var votes: Votes = Votes()) {
+
+  import InMemoryEntries._
+
+  def leaderAppend(ref: ActorRef, e: Vector[Entry]) = {
+    val entries = log.entries.append(e)
+    log = log.resetNextFor(ref)
+    log = log.matchFor(ref, Some(log.entries.lastIndex))
+    log = log.copy(entries = entries)
+  }
+
+  def append(e: Vector[Entry], at: Int) =
+    log = log.copy(entries = log.entries.append(e, at))
+
+  def selectTerm(other: Term) =
+    term = Term.max(this.term, other)
+
+  def nextTerm =
+    term = term.nextTerm
+}
 
 object Meta {
   def apply(nodes: List[Raft.NodeId]): Meta =
-    Meta(Term(1), Log(nodes, List()), new TotalOrdering, nodes) // TODO: Lots
-}
-
-/* state data */
-//case class Data(
-//    currentTerm: Raft.Term, // persisted all states
-//    votedFor: Option[Raft.NodeId], // persisted all states
-//    log: List[LogEntry], // persisted all states
-//    commitIndex: Int, // volatile all states
-//    lastApplied: Int, // volatile all states
-//
-//    // leaders only
-//    nextIndex: Map[Raft.NodeId, Int] = Map(), // volatile
-//    matchIndex: Map[Raft.NodeId, Int] = Map(), // volatile 
-//    pendingRequests: Map[ClientRef, ClientRequest] = Map(), // volatile
-//
-//    // candidates only 
-//    votesReceived: List[Raft.NodeId] = List(), // volatile
-//
-//    // config data
-//    nodes: List[Raft.NodeId] = List() // persistent
-//    )
-
-object StateFactory {
-
+    Meta(Term(0), Log(nodes, Vector[Entry]()), new TotalOrdering, nodes)
 }

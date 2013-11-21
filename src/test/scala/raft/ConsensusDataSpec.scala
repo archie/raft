@@ -14,7 +14,7 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
   var state: Meta = _
 
   val testRsm = new TotalOrdering
-  val entries = List(LogEntry("a", 1), LogEntry("b", 1))
+  val entries = Vector(Entry("a", 1), Entry("b", 1))
   override def beforeEach = state = Meta(Term(1), Log(nodes, entries), testRsm, nodes)
 
   "meta" must {
@@ -67,50 +67,33 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
 
   "a log" must {
     "decrement the next index for a follower if older log entries must be passed" in {
-      val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)),
+      val log = Log(entries = Vector(Entry("a", 1), Entry("b", 2)),
         nextIndices, matchIndices, 0, 0)
       log.decrementNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(2)
     }
     "set the next index for a follower based on the last log entry sent" in {
-      val log = Log(entries = List(LogEntry("a", 1), LogEntry("b", 2)),
+      val log = Log(entries = Vector(Entry("a", 1), Entry("b", 2)),
         nextIndices, matchIndices, 0, 0)
       log.resetNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(2)
     }
     "increase match index monotonically" in {
       val log = Log(
-        entries = List(LogEntry("a", 1), LogEntry("b", 2)),
+        entries = Vector(Entry("a", 1), Entry("b", 2)),
         nextIndex = nextIndices,
         matchIndex = matchIndices)
       log.matchFor(matchIndices.head._1).matchIndex(matchIndices.head._1) must be(1)
     }
     "set match index to specified value" in {
       val log = Log(
-        entries = List(LogEntry("a", 1), LogEntry("b", 2)),
+        entries = Vector(Entry("a", 1), Entry("b", 2)),
         nextIndex = nextIndices,
         matchIndex = matchIndices)
       log.matchFor(matchIndices.head._1, Some(100)).matchIndex(matchIndices.head._1) must be(100)
     }
     "override apply to initialise with appropiate next and match indices" in {
-      val entries = List(LogEntry("a", 1), LogEntry("b", 2))
+      val entries = Vector(Entry("a", 1), Entry("b", 2))
       val nodes = for (n <- List.range(0, 5)) yield TestProbe().ref
       Log(nodes, entries).nextIndex(nodes(0)) must be(2)
-    }
-    "retrieve the term of a specified position in a log" in {
-      state.log.termOf(0) must be(1)
-      state.log.termOf(1) must be(1)
-    }
-    "append entry at the end of log if no index is given" in {
-      state.log = state.log.append(List(LogEntry("test", 2)))
-      state.log.entries.last must be(LogEntry("test", 2))
-    }
-    "append entry at a specified position" in {
-      state.log = state.log.append(List(LogEntry("test", 2)), Some(1))
-      state.log.entries(1) must be(LogEntry("test", 2))
-    }
-    "append entry at a specified position removing old entries" in {
-      state.log = state.log.append(List(LogEntry("test", 2)), Some(0))
-      state.log.entries(0) must be(LogEntry("test", 2))
-      state.log.entries must have length (1)
     }
   }
 
