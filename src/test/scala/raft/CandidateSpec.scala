@@ -19,7 +19,7 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
     val allNodes = testActor :: candidate :: probes(3).map(_.ref)
     initialCandidateState = Meta(
       term = Term(3),
-      log = Log(allNodes, List(LogEntry("a", 1), LogEntry("b", 2))),
+      log = Log(allNodes, Vector(Entry("a", 1), Entry("b", 2))),
       rsm = totalOrdering,
       nodes = allNodes
     )
@@ -53,7 +53,7 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
       candidate.setState(Follower, initialCandidateState) // reusing state
       candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
       Thread.sleep(40) // ensure timeout elapses
-      myprobes.map(_.expectMsg(RequestVote(4, candidate, 1, 2)))
+      myprobes.map(_.expectMsg(RequestVote(4, candidate, 2, 2)))
     }
   }
 
@@ -96,7 +96,7 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
         leaderId = testActor,
         prevLogIndex = 3,
         prevLogTerm = 2,
-        entries = List(LogEntry("op", 2)),
+        entries = Vector(Entry("op", 2)),
         leaderCommit = 0
       )
       candidate.stateName must be(Follower)

@@ -19,14 +19,18 @@ case object Heartbeat extends Message
 case class Init(nodes: List[Raft.NodeId]) extends Message
 
 sealed trait Request extends Message
-case class RequestVote(term: Raft.Term, candidateId: Raft.NodeId,
-  lastLogIndex: Int, lastLogTerm: Raft.Term) extends Request
+case class RequestVote(
+  term: Raft.Term,
+  candidateId: Raft.NodeId,
+  lastLogIndex: Int,
+  lastLogTerm: Raft.Term) extends Request
+
 case class AppendEntries(
   term: Raft.Term,
   leaderId: Raft.NodeId,
   prevLogIndex: Int,
   prevLogTerm: Raft.Term,
-  entries: List[LogEntry],
+  entries: Vector[Entry],
   leaderCommit: Int) extends Request
 
 sealed trait Vote extends Message
@@ -37,8 +41,7 @@ sealed trait AppendReply extends Message
 case class AppendFailure(term: Raft.Term) extends AppendReply
 case class AppendSuccess(term: Raft.Term, index: Int) extends AppendReply
 
-case class ClientRequest(cid: Int, command: String)
-case class ClientRef(sender: Raft.NodeId, cid: Int)
+case class ClientRequest(cid: Int, command: String) extends Message
 
 /* states */
 sealed trait Role
@@ -50,6 +53,7 @@ case object Initialise extends Role
 /* Consensus module */
 class Raft() extends Actor with LoggingFSM[Role, Meta] {
   override def logDepth = 12
+  import InMemoryEntries._
 
   startWith(Initialise, Meta(List()))
 
@@ -143,7 +147,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     case StopEvent(FSM.Normal, state, data) =>
       log.debug("\n == SHUTTING DOWN: NORMAL")
     case StopEvent(FSM.Shutdown, state, data) =>
-      log.debug("\n == SHUTTING DOWN: SHUTDOWN")
+    //      log.debug("\n == SHUTTING DOWN: SHUTDOWN")
     case StopEvent(FSM.Failure(cause), state, data) =>
       log.debug("\n == SHUTTING DOWN: FAILURE")
   }
@@ -153,17 +157,17 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     state
   }
 
-  private def preparedForCandidate(state: Meta): Meta = {
-    state.term = state.term.nextTerm
-    state.nodes.map { t =>
+  private def preparedForCandidate(data: Meta): Meta = {
+    data.nextTerm
+    data.nodes.map { t =>
       t ! RequestVote(
-        term = state.term.current,
+        term = data.term.current,
         candidateId = self,
-        lastLogIndex = state.log.lastIndex,
-        lastLogTerm = state.log.lastTerm)
+        lastLogIndex = data.log.entries.lastIndex,
+        lastLogTerm = data.log.entries.lastTerm)
     }
     resetTimer
-    state
+    data
   }
 
   private def preparedForLeader(state: Meta) = {
@@ -182,7 +186,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   private def resetTimer = {
     cancelTimer("timeout")
     val nextTimeout = (random * 100).toInt + 200
-    setTimer("timeout", Timeout, nextTimeout millis, false) // TODO: should pick random time
+    setTimer("timeout", Timeout, nextTimeout millis, false)
   }
 
   initialize() // akka specific
@@ -198,7 +202,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
       val result = data.rsm.execute(Get) // TODO: make generic
       log.debug("\n APPLIED AND GOT: " + result)
-      entry.sender match {
+      entry.client match {
         case Some(ref) => ref.sender ! (ref.cid, result)
         case None => // ignore
       }
@@ -209,7 +213,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def commitEntries(rpc: AppendSuccess, data: Meta) = {
     if (rpc.index >= data.log.commitIndex &&
-      data.log.termOf(rpc.index) == data.term.current) {
+      data.log.entries.termOf(rpc.index) == data.term.current) {
       val matches = data.log.matchIndex.count(_._2 == rpc.index)
       if (matches >= Math.ceil(data.nodes.length / 2.0))
         data.log = data.log.commit(rpc.index)
@@ -230,9 +234,9 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   }
 
   private def compileMessage(node: ActorRef, data: Meta): AppendEntries = {
-    val prevIndex = data.log.prevIndex(node)
-    val prevTerm = data.log.termOf(prevIndex)
-    val fromMissing = missingRange(data.log.lastIndex, prevIndex)
+    val prevIndex = data.log.nextIndex(node) - 1
+    val prevTerm = data.log.entries.termOf(prevIndex)
+    val fromMissing = missingRange(data.log.entries.lastIndex, prevIndex)
     AppendEntries(
       term = data.term.current,
       leaderId = self,
@@ -248,11 +252,9 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     else lastIndex - prevIndex
 
   private def writeToLog(sender: Raft.NodeId, rpc: ClientRequest, data: Meta) = {
-    val ref = ClientRef(sender, rpc.cid)
-    val entry = LogEntry(rpc.command, data.term.current, Some(ref))
-    data.log = data.log.append(List(entry))
-    data.log = data.log.resetNextFor(self)
-    data.log = data.log.matchFor(self, Some(data.log.lastIndex))
+    val ref = InternalClientRef(sender, rpc.cid)
+    val entry = Entry(rpc.command, data.term.current, Some(ref))
+    data.leaderAppend(self, Vector(entry))
   }
 
   /*
@@ -270,19 +272,16 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   private def hasMatchingLogEntryAtPrevPosition(
     rpc: AppendEntries, data: Meta): Boolean =
     (rpc.prevLogIndex == 0 || // guards for bootstrap case
-      (data.log.entries.isDefinedAt(rpc.prevLogIndex) &&
-        (data.log.entries(rpc.prevLogIndex).term == rpc.prevLogTerm)))
+      (data.log.entries.hasEntryAt(rpc.prevLogIndex) &&
+        (data.log.entries.termOf(rpc.prevLogIndex) == rpc.prevLogTerm)))
 
   private def appendFail(data: Meta) =
     (AppendFailure(data.term.current), data)
 
   private def appendSuccess(rpc: AppendEntries, data: Meta) = {
-    if (rpc.prevLogIndex > 0) // guards for bootstrap case
-      data.log = data.log.append(rpc.entries, Some(rpc.prevLogIndex + 1))
-    else
-      data.log = data.log.append(rpc.entries)
-    data.term = Term.max(data.term, Term(rpc.term))
-    (AppendSuccess(data.term.current, data.log.lastIndex), data)
+    data.append(rpc.entries, rpc.prevLogIndex)
+    data.selectTerm(Term(rpc.term))
+    (AppendSuccess(data.term.current, data.log.entries.lastIndex), data)
   }
 
   /*

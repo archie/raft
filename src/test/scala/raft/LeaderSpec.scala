@@ -20,7 +20,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
 
     exitCandidateState = Meta(
       term = Term(2),
-      log = Log(allNodes, List(LogEntry("a", 1), LogEntry("b", 2))),
+      log = Log(allNodes, Vector(Entry("a", 1), Entry("b", 2))),
       rsm = totalOrdering,
       nodes = allNodes,
       votes = Votes(received = List(leader, allNodes(0))) // just before majority
@@ -28,7 +28,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
 
     stableLeaderState = Meta(
       term = Term(2),
-      log = Log(allNodes, List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))),
+      log = Log(allNodes, Vector(Entry("a", 1), Entry("b", 2), Entry("c", 2))),
       rsm = totalOrdering,
       nodes = allNodes
     )
@@ -39,7 +39,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       leader.setState(Candidate, exitCandidateState)
       probes(0).send(leader, GrantVote(2)) // makes candidate become leader
       Thread.sleep(30)
-      val message = AppendEntries(2, leader, 1, 2, List(), 0)
+      val message = AppendEntries(2, leader, 2, 2, Vector(), 0)
       probes.map(x => x.expectMsg(message))
     }
 
@@ -48,7 +48,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       val nodes = leader :: probes.map(_.ref)
       val state = Meta(
         term = Term(2),
-        log = Log(nodes, List()),
+        log = Log(nodes, Vector()),
         rsm = totalOrdering,
         nodes = nodes,
         votes = Votes(received = List(leader, nodes(2))) // just before majority
@@ -56,7 +56,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       leader.setState(Candidate, state)
       probes(0).send(leader, GrantVote(2)) // makes candidate become leader
       Thread.sleep(30)
-      val message = AppendEntries(2, leader, 0, 1, List(), 0)
+      val message = AppendEntries(2, leader, 0, 0, Vector(), 0)
       probes.map(x => x.expectMsg(message))
     }
 
@@ -72,8 +72,8 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
     "append entry to its local log" in {
       leader.setState(Leader, stableLeaderState)
       probes(0).send(leader, ClientRequest(100, "add"))
-      leader.stateData.log.entries must contain(LogEntry("add", 2,
-        Some(ClientRef(probes(0).ref, 100)))) // 2 == currentTerm
+      leader.stateData.log.entries must contain(Entry("add", 2,
+        Some(InternalClientRef(probes(0).ref, 100)))) // 2 == currentTerm
     }
 
     "respond to client after entry is applied to state machine" in {
@@ -84,7 +84,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       val nodes = probeGen(4)
       val state = Meta(
         term = Term(2),
-        log = Log(nodes.map(_.ref), List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))),
+        log = Log(nodes.map(_.ref), Vector(Entry("a", 1), Entry("b", 2), Entry("c", 2))),
         rsm = totalOrdering,
         nodes = nodes.map(_.ref)
       )
@@ -93,9 +93,9 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       nodes.map(_.expectMsg(AppendEntries(
         term = 2,
         leaderId = leader,
-        prevLogIndex = 2,
+        prevLogIndex = 3,
         prevLogTerm = 2,
-        entries = List(LogEntry("add", 2, Some(ClientRef(testActor, 100)))),
+        entries = Vector(Entry("add", 2, Some(InternalClientRef(testActor, 100)))),
         leaderCommit = 0
       )))
     }
@@ -112,10 +112,10 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       val probeB = TestProbe()
 
       // set state
-      val entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))
+      val entries = Vector(Entry("a", 1), Entry("b", 2), Entry("c", 2))
       val nextIndices = Map[Raft.NodeId, Int](
-        probeA.ref -> 2, // 2 means probeA is 1 entry behind
-        probeB.ref -> 3
+        probeA.ref -> 3, // 3 means probeA is 1 entry behind
+        probeB.ref -> 4
       )
       val matchIndices = Map[Raft.NodeId, Int](probeA.ref -> 0, probeB.ref -> 0)
       stableLeaderState.nodes = List(probeA.ref, probeB.ref)
@@ -125,22 +125,22 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       // trigger change
       leader ! ClientRequest(100, "monkey")
 
-      val ref = Some(ClientRef(testActor, 100))
+      val ref = Some(InternalClientRef(testActor, 100))
       // test
       probeA.expectMsg(AppendEntries(
         term = 2,
         leaderId = leader,
-        prevLogIndex = 1, // verify
+        prevLogIndex = 2,
         prevLogTerm = 2,
-        entries = List(LogEntry("c", 2), LogEntry("monkey", 2, ref)),
+        entries = Vector(Entry("c", 2), Entry("monkey", 2, ref)),
         leaderCommit = 0
       ))
       probeB.expectMsg(AppendEntries(
         term = 2,
         leaderId = leader,
-        prevLogIndex = 2,
+        prevLogIndex = 3,
         prevLogTerm = 2,
-        entries = List(LogEntry("monkey", 2, ref)),
+        entries = Vector(Entry("monkey", 2, ref)),
         leaderCommit = 0
       ))
     }
@@ -160,7 +160,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
     "decrement next log index for follower if append entries fail" in {
       leader.setState(Leader, stableLeaderState)
       probes(0).send(leader, AppendFailure(2))
-      leader.stateData.log.nextIndex(probes(0).ref) must be(2)
+      leader.stateData.log.nextIndex(probes(0).ref) must be(3) // since leader.lastIndex + 1 == 4 
     }
 
     "convert to follower if term is higher in append failure" in {
@@ -173,7 +173,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       val nodes = probeGen(4)
       val state = Meta(
         term = Term(2),
-        log = Log(nodes.map(_.ref), List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))),
+        log = Log(nodes.map(_.ref), Vector(Entry("a", 1), Entry("b", 2), Entry("c", 2))),
         rsm = totalOrdering,
         nodes = nodes.map(_.ref)
       )
@@ -182,9 +182,9 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       nodes(0).expectMsg(AppendEntries(
         term = 2,
         leaderId = leader,
-        prevLogIndex = 1,
+        prevLogIndex = 2, // pointing to Entry("b", 2)
         prevLogTerm = 2,
-        entries = List(LogEntry("c", 2)),
+        entries = Vector(Entry("c", 2)),
         leaderCommit = 0
       ))
     }
@@ -205,7 +205,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       val probeD = TestProbe()
 
       // set state
-      val entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))
+      val entries = Vector(Entry("a", 1), Entry("b", 2), Entry("c", 2))
       val nextIndices = Map[Raft.NodeId, Int](
         probeA.ref -> 3,
         probeB.ref -> 3,
@@ -240,7 +240,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       val probeD = TestProbe()
 
       // set state
-      val entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2))
+      val entries = Vector(Entry("a", 1), Entry("b", 2), Entry("c", 2))
       val nextIndices = Map[Raft.NodeId, Int](
         probeA.ref -> 3,
         probeB.ref -> 3,
@@ -271,7 +271,7 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
       val leader = TestFSMRef(new Raft())
       val state = stableLeaderState.copy()
       state.log = Log(
-        entries = List(LogEntry("a", 1), LogEntry("b", 2), LogEntry("c", 2)),
+        entries = Vector(Entry("a", 1), Entry("b", 2), Entry("c", 2)),
         nextIndex = probes.map(x => (x.ref, 3)).toMap,
         matchIndex = probes.map(x => (x.ref, 2)).toMap,
         commitIndex = 2,
