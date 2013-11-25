@@ -74,7 +74,7 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
     "set the next index for a follower based on the last log entry sent" in {
       val log = Log(entries = Vector(Entry("a", 1), Entry("b", 2)),
         nextIndices, matchIndices, 0, 0)
-      log.resetNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(2)
+      log.resetNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(3)
     }
     "increase match index monotonically" in {
       val log = Log(

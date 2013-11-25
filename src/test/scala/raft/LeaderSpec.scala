@@ -147,8 +147,8 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
 
     "increment next log index on append success" in {
       leader.setState(Leader, stableLeaderState)
-      probes(0).send(leader, AppendSuccess(2, 2))
-      leader.stateData.log.nextIndex(probes(0).ref) must be(3)
+      probes(0).send(leader, AppendSuccess(2, 3)) // appends leaders last element
+      leader.stateData.log.nextIndex(probes(0).ref) must be(4)
     }
 
     "set match for index for follower to highest index of appended entries" in {

@@ -39,9 +39,9 @@ case class Meta(
 
   def leaderAppend(ref: ActorRef, e: Vector[Entry]) = {
     val entries = log.entries.append(e)
+    log = log.copy(entries = entries)
     log = log.resetNextFor(ref)
     log = log.matchFor(ref, Some(log.entries.lastIndex))
-    log = log.copy(entries = entries)
   }
 
   def append(e: Vector[Entry], at: Int) =

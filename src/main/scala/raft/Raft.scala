@@ -85,14 +85,12 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       stay using (upd) replying msg
     case Event(GrantVote(term), data: Meta) =>
       data.votes = data.votes.gotVoteFrom(sender)
-
-      if (data.votes.majority(data.nodes.length)) {
+      if (data.votes.majority(data.nodes.length))
         goto(Leader) using preparedForLeader(data)
-      } else stay using data
+      else stay using data
 
     case Event(DenyVote(term), data: Meta) =>
-      if (term > data.term.current)
-        goto(Follower) using preparedForFollower(data)
+      if (term > data.term.current) goto(Follower) using preparedForFollower(data)
       else stay
 
     // other   
@@ -105,20 +103,18 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   when(Leader) {
     case Event(clientRpc: ClientRequest, data: Meta) =>
-      log.debug("\n ===== GOT REQUEST: " + clientRpc)
       writeToLog(sender, clientRpc, data)
       sendEntries(data)
       stay using data
     case Event(rpc: AppendSuccess, data: Meta) =>
       data.log = data.log.resetNextFor(sender)
       data.log = data.log.matchFor(sender, Some(rpc.index))
-      log.debug(s"\n\n\n $data \n\n\n")
       commitEntries(rpc, data)
       applyEntries(data)
       stay
     case Event(rpc: AppendFailure, data: Meta) =>
-      log.debug("\n ===== APPENDED FAILURE: " + rpc + " while in term: " + data.term)
       if (rpc.term <= data.term.current) {
+        log.debug(s"Decrementing and resending entries to follower: $sender")
         data.log = data.log.decrementNextFor(sender)
         resendTo(sender, data)
         stay
@@ -141,15 +137,6 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       resetTimer
     case Candidate -> Follower => resetTimer
     case Initialise -> Follower => resetTimer
-  }
-
-  onTermination {
-    case StopEvent(FSM.Normal, state, data) =>
-      log.debug("\n == SHUTTING DOWN: NORMAL")
-    case StopEvent(FSM.Shutdown, state, data) =>
-    //      log.debug("\n == SHUTTING DOWN: SHUTDOWN")
-    case StopEvent(FSM.Failure(cause), state, data) =>
-      log.debug("\n == SHUTTING DOWN: FAILURE")
   }
 
   private def preparedForFollower(state: Meta): Meta = {
@@ -196,7 +183,6 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
    */
 
   private def applyEntries(data: Meta) = {
-    //    log.debug(s"\n\n\n DATA 2: $data \n\n\n")
     for (i <- data.log.lastApplied until data.log.commitIndex) {
       val entry = data.log.entries(i)
 
