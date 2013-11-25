@@ -72,29 +72,39 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       }
     case Event(rpc: AppendEntries, data) =>
       resetTimer
+      data.setLeader(rpc.leaderId)
       val (msg, upd) = append(rpc, data)
       stay using upd replying msg
+    case Event(rpc: ClientRequest, data) =>
+      log.debug(s"\n\n\n NOT A LEADER - checking \n $data")
+      data.term.leader match {
+        case Some(leader) => leader forward rpc
+        case None => // drops message
+      }
+      stay
     case Event(Timeout, data) =>
       goto(Candidate) using preparedForCandidate(data)
   }
 
   when(Candidate) {
     // voting events   
-    case Event(rpc: RequestVote, data) if (rpc.term == data.term.current) =>
-      val (msg, upd) = grant(rpc, data)
-      stay using (upd) replying msg
     case Event(GrantVote(term), data: Meta) =>
       data.votes = data.votes.gotVoteFrom(sender)
       if (data.votes.majority(data.nodes.length))
         goto(Leader) using preparedForLeader(data)
       else stay using data
-
     case Event(DenyVote(term), data: Meta) =>
-      if (term > data.term.current) goto(Follower) using preparedForFollower(data)
+      if (term > data.term.current)
+        goto(Follower) using preparedForFollower(data)
       else stay
+
+    case Event(rpc: RequestVote, data) if (rpc.term == data.term.current) =>
+      val (msg, upd) = grant(rpc, data)
+      stay using (upd) replying msg
 
     // other   
     case Event(rpc: AppendEntries, data: Meta) =>
+      data.setLeader(rpc.leaderId)
       val (msg, upd) = append(rpc, data)
       goto(Follower) using preparedForFollower(data) replying msg
     case Event(Timeout, data: Meta) =>
@@ -182,20 +192,17 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
    *  --- Internals ---
    */
 
-  private def applyEntries(data: Meta) = {
+  private def applyEntries(data: Meta) =
     for (i <- data.log.lastApplied until data.log.commitIndex) {
       val entry = data.log.entries(i)
-
       val result = data.rsm.execute(Get) // TODO: make generic
-      log.debug("\n APPLIED AND GOT: " + result)
+      data.log = data.log.applied
+
       entry.client match {
         case Some(ref) => ref.sender ! (ref.cid, result)
         case None => // ignore
       }
-
-      data.log = data.log.applied
     }
-  }
 
   private def commitEntries(rpc: AppendSuccess, data: Meta) = {
     if (rpc.index >= data.log.commitIndex &&

@@ -3,7 +3,7 @@ package raft
 import scala.language.higherKinds
 import akka.actor.ActorRef
 
-case class Term(current: Int) extends Ordered[Term] {
+case class Term(current: Int, leader: Option[ActorRef] = None) extends Ordered[Term] {
   def nextTerm: Term = this.copy(current = current + 1)
   def compare(that: Term) = current.compare(that.current)
 }
@@ -52,6 +52,9 @@ case class Meta(
 
   def nextTerm =
     term = term.nextTerm
+
+  def setLeader(leader: Raft.NodeId) =
+    term = term.copy(leader = Some(leader))
 }
 
 object Meta {

@@ -1,8 +1,13 @@
 package raft
 
+import scala.language.postfixOps
 import org.scalatest._
 import akka.testkit._
+import akka.pattern.ask
+import scala.concurrent.duration._
 import akka.actor.ActorSystem
+import scala.util.Success
+import scala.concurrent.Await
 
 abstract class RaftSpec extends TestKit(ActorSystem()) with ImplicitSender
     with WordSpecLike with MustMatchers with BeforeAndAfterAll {
@@ -57,8 +62,55 @@ class RaftIntegrationSpec extends RaftSpec with BeforeAndAfterEach {
       }
     }
 
-    "respond to client requests" in (pending)
-    "forward client requests to the cluster leader" in (pending)
+    "respond to a client request" in {
+      Thread.sleep(500)
+      val client = TestProbe()
+      val request = ClientRequest(100, "test")
+      val leader = cluster.filter(_.stateName == Leader).head
+      client.send(leader, request)
+      client.expectMsg((100, 1))
+    }
+
+    "respond to multiple client requests" in {
+      Thread.sleep(500)
+      import akka.util.Timeout
+      import system.dispatcher
+      implicit val timeout = Timeout(3 seconds)
+
+      val request1 = ClientRequest(100, "test")
+      val request2 = ClientRequest(200, "test")
+      val leader = cluster.filter(_.stateName == Leader).head
+
+      val q1 = leader ? request1
+      val q2 = leader ? request2
+      val result1 = Await.result(q1, 3 seconds)
+      val result2 = Await.result(q2, 3 seconds)
+
+      result1 match {
+        case (cid: Int, x: Int) =>
+          cid must be(100)
+          x must (be(1) or be(2))
+        case _ => fail
+      }
+
+      result2 match {
+        case (cid: Int, x: Int) =>
+          cid must be(200)
+          x must (be(1) or be(2))
+        case _ => fail
+      }
+
+    }
+
+    "forward client requests to the cluster leader" in {
+      pending
+      Thread.sleep(500)
+      val client = TestProbe()
+      val request = ClientRequest(100, "test")
+      val notALeader = cluster.filter(_.stateName != Leader).head
+      client.send(notALeader, request)
+      client.expectMsg((100, 1))
+    }
 
   }
 }
