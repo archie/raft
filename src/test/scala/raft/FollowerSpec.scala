@@ -13,7 +13,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
   override def beforeEach = {
     default = Meta(
       term = Term(2),
-      log = Log(List(probe.ref), Vector(Entry("a", 1), Entry("b", 2))),
+      log = Log(List(probe.ref), Vector(Entry("a", Term(1)), Entry("b", Term(2)))),
       rsm = totalOrdering,
       nodes = List(probe.ref)
     )
@@ -27,85 +27,85 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
     "not append entries if requester's term is less than current term" in {
       follower.setState(Follower, default)
       follower ! AppendEntries(
-        term = 1,
+        term = Term(1),
         leaderId = testActor,
         prevLogIndex = 2,
-        prevLogTerm = 1,
-        entries = Vector(Entry("op", 1)),
+        prevLogTerm = Term(1),
+        entries = Vector(Entry("op", Term(1))),
         leaderCommit = 1)
-      expectMsg(AppendFailure(2))
+      expectMsg(AppendFailure(Term(2)))
     }
 
     "not append entries if log doesn't contain an entry at " +
       "previous index" in {
         follower.setState(Follower, default)
         follower ! AppendEntries(
-          term = 2,
+          term = Term(2),
           leaderId = testActor,
           prevLogIndex = 3, // this is one step ahead of follower.log.length-1
-          prevLogTerm = 2,
-          entries = Vector(Entry("op", 2)),
+          prevLogTerm = Term(2),
+          entries = Vector(Entry("op", Term(2))),
           leaderCommit = 0
         )
-        expectMsg(AppendFailure(2))
+        expectMsg(AppendFailure(Term(2)))
       }
 
     "not append entries if log doesn't contain an entry at " +
       "previous index with matching terms" in {
         follower.setState(Follower, default)
         follower ! AppendEntries(
-          term = 3,
+          term = Term(3),
           leaderId = testActor,
           prevLogIndex = 2, // last position in follower log
-          prevLogTerm = 3,
-          entries = Vector(Entry("op", 3)),
+          prevLogTerm = Term(3),
+          entries = Vector(Entry("op", Term(3))),
           leaderCommit = 0
         )
-        expectMsg(AppendFailure(2)) // TODO: needs to include jump back info
+        expectMsg(AppendFailure(Term(2))) // TODO: needs to include jump back info
       }
 
     "remove uncommitted entries if appending at a position " +
       "less than log length" in {
         val longer = default.copy()
-        longer.append(Vector(Entry("remove", 2)), 2)
+        longer.append(Vector(Entry("remove", Term(2))), 2)
         follower.setState(Follower, longer)
         follower ! AppendEntries(
-          term = 3,
+          term = Term(3),
           leaderId = testActor,
           prevLogIndex = 2, // matches follower's entry ("b", 2)
-          prevLogTerm = 2, // matches follower's entry's term
-          entries = Vector(Entry("op", 3)),
+          prevLogTerm = Term(2), // matches follower's entry's term
+          entries = Vector(Entry("op", Term(3))),
           leaderCommit = 0
         )
-        expectMsg(AppendSuccess(3, 3))
-        follower.stateData.log.entries must not contain (Entry("remove", 2))
+        expectMsg(AppendSuccess(Term(3), 3))
+        follower.stateData.log.entries must not contain (Entry("remove", Term(2)))
       }
 
     "append entry if previous log index and term match" in {
       follower.setState(Follower, default)
       follower ! AppendEntries(
-        term = 3,
+        term = Term(3),
         leaderId = testActor,
         prevLogIndex = 2, // matches follower's last entry
-        prevLogTerm = 2, // matches follower's last entry's term
-        entries = Vector(Entry("op", 3)),
+        prevLogTerm = Term(2), // matches follower's last entry's term
+        entries = Vector(Entry("op", Term(3))),
         leaderCommit = 0
       )
-      expectMsg(AppendSuccess(3, 3))
+      expectMsg(AppendSuccess(Term(3), 3))
       follower.stateData.log.entries.last.command must be("op")
     }
 
     "append NOOP entries" in {
       follower.setState(Follower, default)
       follower ! AppendEntries(
-        term = 3,
+        term = Term(3),
         leaderId = testActor,
         prevLogIndex = 2,
-        prevLogTerm = 2,
+        prevLogTerm = Term(2),
         entries = Vector(),
         leaderCommit = 0
       )
-      expectMsg(AppendSuccess(3, 2))
+      expectMsg(AppendSuccess(Term(3), 2))
       follower.stateData.log.entries.last.command must be("b")
     }
 
@@ -118,14 +118,14 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       )
       follower.setState(Follower, empty)
       follower ! AppendEntries(
-        term = 2,
+        term = Term(2),
         leaderId = testActor,
         prevLogIndex = 0,
-        prevLogTerm = 1,
+        prevLogTerm = Term(1),
         entries = Vector(),
         leaderCommit = 0
       )
-      expectMsg(AppendSuccess(2, 0))
+      expectMsg(AppendSuccess(Term(2), 0))
     }
 
     "append NOOP entries when log is empty in same term" in {
@@ -137,47 +137,47 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       )
       follower.setState(Follower, empty)
       follower ! AppendEntries(
-        term = 50,
+        term = Term(50),
         leaderId = testActor,
         prevLogIndex = 0,
-        prevLogTerm = 1,
+        prevLogTerm = Term(1),
         entries = Vector(),
         leaderCommit = 0
       )
-      expectMsg(AppendSuccess(50, 0))
+      expectMsg(AppendSuccess(Term(50), 0))
     }
 
     "append multiple entries if previous log index and term match" in {
       follower.setState(Follower, default)
       val probe = TestProbe()
       probe.send(follower, AppendEntries(
-        term = 3,
+        term = Term(3),
         leaderId = testActor,
         prevLogIndex = 2, // matches follower's last entry
-        prevLogTerm = 2, // matches follower's last entry's term
-        entries = Vector(Entry("op", 3), Entry("op2", 3)),
+        prevLogTerm = Term(2), // matches follower's last entry's term
+        entries = Vector(Entry("op", Term(3)), Entry("op2", Term(3))),
         leaderCommit = 0
       ))
-      probe.expectMsg(AppendSuccess(3, 4))
-      follower.stateData.log.entries must contain(Entry("op", 3))
-      follower.stateData.log.entries.last must be(Entry("op2", 3))
+      probe.expectMsg(AppendSuccess(Term(3), 4))
+      follower.stateData.log.entries must contain(Entry("op", Term(3)))
+      follower.stateData.log.entries.last must be(Entry("op2", Term(3)))
     }
 
     "grant vote if candidate term is higher to own term" in {
       follower.setState(Follower, default)
-      follower ! RequestVote(3, testActor, 2, 2)
-      expectMsg(GrantVote(3))
+      follower ! RequestVote(Term(3), testActor, 2, Term(2))
+      expectMsg(GrantVote(Term(3)))
     }
 
     "grant vote if candidate is exactly equal" in {
       follower.setState(Follower, default)
       follower ! RequestVote(
-        term = 2,
+        term = Term(2),
         candidateId = testActor,
         lastLogIndex = 1,
-        lastLogTerm = 2
+        lastLogTerm = Term(2)
       )
-      expectMsg(GrantVote(2))
+      expectMsg(GrantVote(Term(2)))
     }
 
     "deny vote if own log's last term is more up to date than candidate" in {
@@ -187,12 +187,12 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       //      longer (i.e., logIndex) is more up to date.
       follower.setState(Follower, default)
       follower ! RequestVote(
-        term = 2,
+        term = Term(2),
         candidateId = testActor,
         lastLogIndex = 1,
-        lastLogTerm = 1
+        lastLogTerm = Term(1)
       )
-      expectMsg(DenyVote(2))
+      expectMsg(DenyVote(Term(2)))
     }
 
     "deny vote if own log's last term is equal but log is longer than candidate" in {
@@ -201,28 +201,28 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       //      If the logs end with the same term, then whichever log is 
       //      longer (i.e., logIndex) is more up to date.
       val longer = default.copy()
-      longer.append(Vector(Entry("c", 2)), 2)
+      longer.append(Vector(Entry("c", Term(2))), 2)
       follower.setState(Follower, longer)
       follower ! RequestVote(
-        term = 2,
+        term = Term(2),
         candidateId = testActor,
         lastLogIndex = 1, // shorter log than follower
-        lastLogTerm = 2
+        lastLogTerm = Term(2)
       )
-      expectMsg(DenyVote(2))
+      expectMsg(DenyVote(Term(2)))
     }
 
     "deny vote if term is lower than own term" in {
       follower.setState(Follower, default)
-      follower ! RequestVote(1, testActor, 2, 2)
-      expectMsg(DenyVote(2))
+      follower ! RequestVote(Term(1), testActor, 2, Term(2))
+      expectMsg(DenyVote(Term(2)))
     }
 
     "deny vote if vote for term already cast" in {
       val voted = default.copy(votes = default.votes.vote(probe.ref))
       follower.setState(Follower, voted)
-      follower ! RequestVote(3, testActor, 2, 2)
-      expectMsg(DenyVote(3))
+      follower ! RequestVote(Term(3), testActor, 2, Term(2))
+      expectMsg(DenyVote(Term(3)))
     }
 
     "convert to candidate if no messages are received within timeout" in {
@@ -236,7 +236,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       follower.setState(Follower, default)
       follower.setTimer("timeout", Timeout, 200 millis, false)
       Thread.sleep(150)
-      follower ! RequestVote(3, testActor, 2, 2) // follower grants vote
+      follower ! RequestVote(Term(3), testActor, 2, Term(2)) // follower grants vote
       Thread.sleep(100) // ensures first timeout has expired 
       follower.stateName must be(Follower) // stays as follower
       follower.isTimerActive("timeout") must be(true)
@@ -247,7 +247,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       follower.setState(Follower, default)
       follower.setTimer("timeout", Timeout, 200 millis, false)
       Thread.sleep(150)
-      follower ! RequestVote(1, testActor, 2, 2) // follower denies this
+      follower ! RequestVote(Term(1), testActor, 2, Term(2)) // follower denies this
       Thread.sleep(100) // ensures first timeout has expired 
       follower.stateName must be(Candidate) // timeout happened,
       // transition to candidate
@@ -257,7 +257,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       follower.setState(Follower, default)
       follower.setTimer("timeout", Timeout, 200 millis, false)
       Thread.sleep(150)
-      follower ! AppendEntries(3, testActor, 1, 2, Vector(Entry("op", 3)), 0)
+      follower ! AppendEntries(Term(3), testActor, 1, Term(2), Vector(Entry("op", Term(3))), 0)
       Thread.sleep(100) // ensures first timeout has expired 
       follower.stateName must be(Follower) // stays as follower
       follower.isTimerActive("timeout") must be(true)
@@ -273,14 +273,14 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
 
     "increase own term if RequestVote contains higher term" in {
       follower.setState(Follower, default)
-      follower ! RequestVote(3, testActor, 1, 1) // higher term
+      follower ! RequestVote(Term(3), testActor, 1, Term(1)) // higher term
       follower.stateName must be(Follower)
       follower.stateData.term.current must be(3)
     }
 
     "increase own term if AppendEntries contains higher term" in {
       follower.setState(Follower, default)
-      follower ! AppendEntries(3, testActor, 2, 2, Vector(Entry("op", 3)), 0) // higher term
+      follower ! AppendEntries(Term(3), testActor, 2, Term(2), Vector(Entry("op", Term(3))), 0) // higher term
       follower.stateName must be(Follower)
       follower.stateData.term.current must be(3)
     }

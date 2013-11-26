@@ -8,7 +8,6 @@ import math.random
 
 /* types */
 object Raft {
-  type Term = Int
   type NodeId = ActorRef
 }
 
@@ -20,26 +19,26 @@ case class Init(nodes: List[Raft.NodeId]) extends Message
 
 sealed trait Request extends Message
 case class RequestVote(
-  term: Raft.Term,
+  term: Term,
   candidateId: Raft.NodeId,
   lastLogIndex: Int,
-  lastLogTerm: Raft.Term) extends Request
+  lastLogTerm: Term) extends Request
 
 case class AppendEntries(
-  term: Raft.Term,
+  term: Term,
   leaderId: Raft.NodeId,
   prevLogIndex: Int,
-  prevLogTerm: Raft.Term,
+  prevLogTerm: Term,
   entries: Vector[Entry],
   leaderCommit: Int) extends Request
 
 sealed trait Vote extends Message
-case class DenyVote(term: Raft.Term) extends Vote
-case class GrantVote(term: Raft.Term) extends Vote
+case class DenyVote(term: Term) extends Vote
+case class GrantVote(term: Term) extends Vote
 
 sealed trait AppendReply extends Message
-case class AppendFailure(term: Raft.Term) extends AppendReply
-case class AppendSuccess(term: Raft.Term, index: Int) extends AppendReply
+case class AppendFailure(term: Term) extends AppendReply
+case class AppendSuccess(term: Term, index: Int) extends AppendReply
 
 case class ClientRequest(cid: Int, command: String) extends Message
 
@@ -72,16 +71,8 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       }
     case Event(rpc: AppendEntries, data) =>
       resetTimer
-      data.setLeader(rpc.leaderId)
       val (msg, upd) = append(rpc, data)
       stay using upd replying msg
-    case Event(rpc: ClientRequest, data) =>
-      log.debug(s"\n\n\n NOT A LEADER - checking \n $data")
-      data.term.leader match {
-        case Some(leader) => leader forward rpc
-        case None => // drops message
-      }
-      stay
     case Event(Timeout, data) =>
       goto(Candidate) using preparedForCandidate(data)
   }
@@ -94,17 +85,16 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
         goto(Leader) using preparedForLeader(data)
       else stay using data
     case Event(DenyVote(term), data: Meta) =>
-      if (term > data.term.current)
+      if (term > data.term)
         goto(Follower) using preparedForFollower(data)
       else stay
 
-    case Event(rpc: RequestVote, data) if (rpc.term == data.term.current) =>
+    case Event(rpc: RequestVote, data) if (rpc.term == data.term) =>
       val (msg, upd) = grant(rpc, data)
       stay using (upd) replying msg
 
     // other   
     case Event(rpc: AppendEntries, data: Meta) =>
-      data.setLeader(rpc.leaderId)
       val (msg, upd) = append(rpc, data)
       goto(Follower) using preparedForFollower(data) replying msg
     case Event(Timeout, data: Meta) =>
@@ -123,13 +113,13 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       applyEntries(data)
       stay
     case Event(rpc: AppendFailure, data: Meta) =>
-      if (rpc.term <= data.term.current) {
+      if (rpc.term <= data.term) {
         log.debug(s"Decrementing and resending entries to follower: $sender")
         data.log = data.log.decrementNextFor(sender)
         resendTo(sender, data)
         stay
       } else {
-        data.term = Term(rpc.term)
+        data.term = rpc.term
         goto(Follower) using preparedForFollower(data)
       }
     case Event(Heartbeat, data: Meta) =>
@@ -158,7 +148,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     data.nextTerm
     data.nodes.map { t =>
       t ! RequestVote(
-        term = data.term.current,
+        term = data.term,
         candidateId = self,
         lastLogIndex = data.log.entries.lastIndex,
         lastLogTerm = data.log.entries.lastTerm)
@@ -206,7 +196,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def commitEntries(rpc: AppendSuccess, data: Meta) = {
     if (rpc.index >= data.log.commitIndex &&
-      data.log.entries.termOf(rpc.index) == data.term.current) {
+      data.log.entries.termOf(rpc.index) == data.term) {
       val matches = data.log.matchIndex.count(_._2 == rpc.index)
       if (matches >= Math.ceil(data.nodes.length / 2.0))
         data.log = data.log.commit(rpc.index)
@@ -231,7 +221,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     val prevTerm = data.log.entries.termOf(prevIndex)
     val fromMissing = missingRange(data.log.entries.lastIndex, prevIndex)
     AppendEntries(
-      term = data.term.current,
+      term = data.term,
       leaderId = self,
       prevLogIndex = prevIndex,
       prevLogTerm = prevTerm,
@@ -246,7 +236,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def writeToLog(sender: Raft.NodeId, rpc: ClientRequest, data: Meta) = {
     val ref = InternalClientRef(sender, rpc.cid)
-    val entry = Entry(rpc.command, data.term.current, Some(ref))
+    val entry = Entry(rpc.command, data.term, Some(ref))
     data.leaderAppend(self, Vector(entry))
   }
 
@@ -260,7 +250,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   }
 
   private def leaderIsBehind(rpc: AppendEntries, data: Meta): Boolean =
-    rpc.term < data.term.current
+    rpc.term < data.term
 
   private def hasMatchingLogEntryAtPrevPosition(
     rpc: AppendEntries, data: Meta): Boolean =
@@ -269,12 +259,12 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
         (data.log.entries.termOf(rpc.prevLogIndex) == rpc.prevLogTerm)))
 
   private def appendFail(data: Meta) =
-    (AppendFailure(data.term.current), data)
+    (AppendFailure(data.term), data)
 
   private def appendSuccess(rpc: AppendEntries, data: Meta) = {
     data.append(rpc.entries, rpc.prevLogIndex)
-    data.selectTerm(Term(rpc.term))
-    (AppendSuccess(data.term.current, data.log.entries.lastIndex), data)
+    data.selectTerm(rpc.term)
+    (AppendSuccess(data.term, data.log.entries.lastIndex), data)
   }
 
   /*
@@ -282,21 +272,21 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
    */
   private def vote(rpc: RequestVote, data: Meta): (Vote, Meta) =
     if (alreadyVoted(data)) deny(rpc, data)
-    else if (rpc.term < data.term.current) deny(rpc, data)
-    else if (rpc.term == data.term.current)
+    else if (rpc.term < data.term) deny(rpc, data)
+    else if (rpc.term == data.term)
       if (candidateLogTermIsBehind(rpc, data)) deny(rpc, data)
       else if (candidateLogTermIsEqualButHasShorterLog(rpc, data)) deny(rpc, data)
       else grant(rpc, data) // follower and candidate are equal, grant
     else grant(rpc, data) // candidate is ahead, grant
 
   private def deny(rpc: RequestVote, data: Meta) = {
-    data.term = Term.max(data.term, Term(rpc.term))
-    (DenyVote(data.term.current), data)
+    data.term = Term.max(data.term, rpc.term)
+    (DenyVote(data.term), data)
   }
   private def grant(rpc: RequestVote, data: Meta): (Vote, Meta) = {
     data.votes = data.votes.vote(rpc.candidateId)
-    data.term = Term.max(data.term, Term(rpc.term))
-    (GrantVote(data.term.current), data)
+    data.term = Term.max(data.term, rpc.term)
+    (GrantVote(data.term), data)
   }
 
   private def candidateLogTermIsBehind(rpc: RequestVote, data: Meta) =

@@ -49,7 +49,7 @@ class RaftIntegrationSpec extends RaftSpec with BeforeAndAfterEach {
       val request = ClientRequest(100, "test")
       Thread.sleep(500)
       val leader = cluster.filter(_.stateName == Leader).head
-      val leaderTerm = leader.stateData.term.current
+      val leaderTerm = leader.stateData.term
       client.send(leader, request)
       Thread.sleep(100)
       leader.stateData.log.entries.length must be(1)

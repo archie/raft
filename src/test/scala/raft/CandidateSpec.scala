@@ -19,7 +19,7 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
     val allNodes = testActor :: candidate :: probes(3).map(_.ref)
     initialCandidateState = Meta(
       term = Term(3),
-      log = Log(allNodes, Vector(Entry("a", 1), Entry("b", 2))),
+      log = Log(allNodes, Vector(Entry("a", Term(1)), Entry("b", Term(2)))),
       rsm = totalOrdering,
       nodes = allNodes
     )
@@ -53,7 +53,7 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
       candidate.setState(Follower, initialCandidateState) // reusing state
       candidate.setTimer("timeout", Timeout, 1 millis, false) // force transition
       Thread.sleep(40) // ensure timeout elapses
-      myprobes.map(_.expectMsg(RequestVote(4, candidate, 2, 2)))
+      myprobes.map(_.expectMsg(RequestVote(Term(4), candidate, 2, Term(2))))
     }
   }
 
@@ -63,7 +63,7 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
 
       for (i <- List.range(0, 4)) // excluding candidate  
         yield actor(new Act {
-        whenStarting { candidate ! GrantVote(3) }
+        whenStarting { candidate ! GrantVote(Term(3)) }
       })
 
       Thread.sleep(50) // give candidate time to receive and parse messages
@@ -75,7 +75,7 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
       cand.setState(Candidate, initialCandidateState)
       for (i <- List.range(0, 2)) // yields two votes  
         yield actor(new Act {
-        whenStarting { cand ! GrantVote(3) }
+        whenStarting { cand ! GrantVote(Term(3)) }
       })
       Thread.sleep(50)
       cand.stateName must be(Candidate)
@@ -85,18 +85,18 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
       val probe = TestProbe()
       val cand = TestFSMRef(new Raft())
       cand.setState(Candidate, initialCandidateState)
-      probe.send(cand, GrantVote(3))
+      probe.send(cand, GrantVote(Term(3)))
       probe.expectNoMsg
     }
 
     "convert to follower if receiving append entries message from new leader" in {
       candidate.setState(Candidate, initialCandidateState)
       candidate ! AppendEntries(
-        term = 4,
+        term = Term(4),
         leaderId = testActor,
         prevLogIndex = 3,
-        prevLogTerm = 2,
-        entries = Vector(Entry("op", 2)),
+        prevLogTerm = Term(2),
+        entries = Vector(Entry("op", Term(2))),
         leaderCommit = 0
       )
       candidate.stateName must be(Follower)

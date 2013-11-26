@@ -7,7 +7,7 @@ case class InternalClientRef(sender: ActorRef, cid: Int)
 
 case class Entry(
   val command: String,
-  val term: Int,
+  val term: Term,
   val client: Option[InternalClientRef] = None)
 
 abstract class Entries(log: Vector[Entry]) {
@@ -21,9 +21,9 @@ abstract class Entries(log: Vector[Entry]) {
     updlog
   }
 
-  def termOf(index: Int): Int =
+  def termOf(index: Int): Term =
     if (index > 0) this(index).term
-    else 0
+    else Term(0)
   def lastIndex = log.length
   def lastTerm = termOf(lastIndex)
   def hasEntryAt(index: Int): Boolean = log.isDefinedAt(index - 1)

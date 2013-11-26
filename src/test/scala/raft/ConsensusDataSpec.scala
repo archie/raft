@@ -14,7 +14,7 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
   var state: Meta = _
 
   val testRsm = new TotalOrdering
-  val entries = Vector(Entry("a", 1), Entry("b", 1))
+  val entries = Vector(Entry("a", Term(1)), Entry("b", Term(1)))
   override def beforeEach = state = Meta(Term(1), Log(nodes, entries), testRsm, nodes)
 
   "meta" must {
@@ -67,31 +67,31 @@ class ConsensusDataSpec extends RaftSpec with WordSpecLike
 
   "a log" must {
     "decrement the next index for a follower if older log entries must be passed" in {
-      val log = Log(entries = Vector(Entry("a", 1), Entry("b", 2)),
+      val log = Log(entries = Vector(Entry("a", Term(1)), Entry("b", Term(2))),
         nextIndices, matchIndices, 0, 0)
       log.decrementNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(2)
     }
     "set the next index for a follower based on the last log entry sent" in {
-      val log = Log(entries = Vector(Entry("a", 1), Entry("b", 2)),
+      val log = Log(entries = Vector(Entry("a", Term(1)), Entry("b", Term(2))),
         nextIndices, matchIndices, 0, 0)
       log.resetNextFor(nextIndices.head._1).nextIndex(nextIndices.head._1) must be(3)
     }
     "increase match index monotonically" in {
       val log = Log(
-        entries = Vector(Entry("a", 1), Entry("b", 2)),
+        entries = Vector(Entry("a", Term(1)), Entry("b", Term(2))),
         nextIndex = nextIndices,
         matchIndex = matchIndices)
       log.matchFor(matchIndices.head._1).matchIndex(matchIndices.head._1) must be(1)
     }
     "set match index to specified value" in {
       val log = Log(
-        entries = Vector(Entry("a", 1), Entry("b", 2)),
+        entries = Vector(Entry("a", Term(1)), Entry("b", Term(2))),
         nextIndex = nextIndices,
         matchIndex = matchIndices)
       log.matchFor(matchIndices.head._1, Some(100)).matchIndex(matchIndices.head._1) must be(100)
     }
     "override apply to initialise with appropiate next and match indices" in {
-      val entries = Vector(Entry("a", 1), Entry("b", 2))
+      val entries = Vector(Entry("a", Term(1)), Entry("b", Term(2)))
       val nodes = for (n <- List.range(0, 5)) yield TestProbe().ref
       Log(nodes, entries).nextIndex(nodes(0)) must be(3)
     }
