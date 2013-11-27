@@ -113,11 +113,11 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
 
       // set state
       val entries = Vector(Entry("a", Term(1)), Entry("b", Term(2)), Entry("c", Term(2)))
-      val nextIndices = Map[Raft.NodeId, Int](
+      val nextIndices = Map[NodeId, Int](
         probeA.ref -> 3, // 3 means probeA is 1 entry behind
         probeB.ref -> 4
       )
-      val matchIndices = Map[Raft.NodeId, Int](probeA.ref -> 0, probeB.ref -> 0)
+      val matchIndices = Map[NodeId, Int](probeA.ref -> 0, probeB.ref -> 0)
       stableLeaderState.nodes = List(probeA.ref, probeB.ref)
       stableLeaderState.log = Log(entries, nextIndices, matchIndices, 0)
       leader.setState(Leader, stableLeaderState)
@@ -206,14 +206,14 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
 
       // set state
       val entries = Vector(Entry("a", Term(1)), Entry("b", Term(2)), Entry("c", Term(2)))
-      val nextIndices = Map[Raft.NodeId, Int](
+      val nextIndices = Map[NodeId, Int](
         probeA.ref -> 3,
         probeB.ref -> 3,
         probeC.ref -> 3,
         probeD.ref -> 3,
         leader -> 3
       )
-      val matchIndices = Map[Raft.NodeId, Int](
+      val matchIndices = Map[NodeId, Int](
         probeA.ref -> 2,
         probeB.ref -> 2,
         probeC.ref -> 0,
@@ -241,14 +241,14 @@ class LeaderSpec extends RaftSpec with BeforeAndAfterEach {
 
       // set state
       val entries = Vector(Entry("a", Term(1)), Entry("b", Term(2)), Entry("c", Term(2)))
-      val nextIndices = Map[Raft.NodeId, Int](
+      val nextIndices = Map[NodeId, Int](
         probeA.ref -> 3,
         probeB.ref -> 3,
         probeC.ref -> 3,
         probeD.ref -> 3,
         leader -> 3
       )
-      val matchIndices = Map[Raft.NodeId, Int](
+      val matchIndices = Map[NodeId, Int](
         probeA.ref -> 2,
         probeB.ref -> 0,
         probeC.ref -> 0,

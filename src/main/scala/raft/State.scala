@@ -15,14 +15,14 @@ object Term {
 }
 
 case class Votes(
-    votedFor: Option[Raft.NodeId] = None,
-    received: List[Raft.NodeId] = List()) {
+    votedFor: Option[NodeId] = None,
+    received: List[NodeId] = List()) {
   def gotVoteFrom(ref: ActorRef): Votes = this.copy(received = ref :: received)
 
   def majority(size: Int): Boolean =
     (this.received.length >= Math.ceil(size / 2.0))
 
-  def vote(ref: Raft.NodeId) = votedFor match {
+  def vote(ref: NodeId) = votedFor match {
     case Some(vote) => this
     case None => copy(votedFor = Some(ref)) // TODO: Persist this value before returning
   }
@@ -32,7 +32,7 @@ case class Meta(
     var term: Term,
     var log: Log,
     rsm: TotalOrdering, // TODO: Make generic
-    var nodes: List[Raft.NodeId],
+    var nodes: List[NodeId],
     var votes: Votes = Votes()) {
 
   import InMemoryEntries._
@@ -55,6 +55,6 @@ case class Meta(
 }
 
 object Meta {
-  def apply(nodes: List[Raft.NodeId]): Meta =
+  def apply(nodes: List[NodeId]): Meta =
     Meta(Term(0), Log(nodes, Vector[Entry]()), new TotalOrdering, nodes)
 }

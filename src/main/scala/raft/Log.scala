@@ -1,9 +1,8 @@
 package raft
 
 import scala.language.implicitConversions
-import akka.actor.ActorRef
 
-case class InternalClientRef(sender: ActorRef, cid: Int)
+case class InternalClientRef(sender: NodeId, cid: Int)
 
 case class Entry(
   val command: String,
@@ -42,20 +41,20 @@ object InMemoryEntries {
 
 case class Log(
     entries: Vector[Entry],
-    nextIndex: Map[Raft.NodeId, Int],
-    matchIndex: Map[Raft.NodeId, Int],
+    nextIndex: Map[NodeId, Int],
+    matchIndex: Map[NodeId, Int],
     commitIndex: Int = 0,
     lastApplied: Int = 0) {
 
   import InMemoryEntries._
 
-  def decrementNextFor(node: Raft.NodeId) =
+  def decrementNextFor(node: NodeId) =
     copy(nextIndex = nextIndex + (node -> (nextIndex(node) - 1)))
 
-  def resetNextFor(node: Raft.NodeId) =
+  def resetNextFor(node: NodeId) =
     copy(nextIndex = nextIndex + (node -> (entries.lastIndex + 1)))
 
-  def matchFor(node: Raft.NodeId, to: Option[Int] = None) = to match {
+  def matchFor(node: NodeId, to: Option[Int] = None) = to match {
     case Some(toVal) => copy(matchIndex = matchIndex + (node -> toVal))
     case None => copy(matchIndex = matchIndex + (node -> (matchIndex(node) + 1)))
   }
@@ -66,7 +65,7 @@ case class Log(
 
 object Log {
   import InMemoryEntries._
-  def apply(nodes: List[Raft.NodeId], entries: Vector[Entry]): Log = {
+  def apply(nodes: List[NodeId], entries: Vector[Entry]): Log = {
     val nextIndex = entries.lastIndex + 1
     val nextIndices = (for (n <- nodes) yield (n -> nextIndex)).toMap
     val matchIndices = (for (n <- nodes) yield (n -> 0)).toMap

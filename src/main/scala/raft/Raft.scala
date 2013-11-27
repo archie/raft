@@ -6,27 +6,22 @@ import scala.concurrent.duration._
 import scala.concurrent.Promise
 import math.random
 
-/* types */
-object Raft {
-  type NodeId = ActorRef
-}
-
 /* messages */
 sealed trait Message
 case object Timeout extends Message
 case object Heartbeat extends Message
-case class Init(nodes: List[Raft.NodeId]) extends Message
+case class Init(nodes: List[NodeId]) extends Message
 
 sealed trait Request extends Message
 case class RequestVote(
   term: Term,
-  candidateId: Raft.NodeId,
+  candidateId: NodeId,
   lastLogIndex: Int,
   lastLogTerm: Term) extends Request
 
 case class AppendEntries(
   term: Term,
-  leaderId: Raft.NodeId,
+  leaderId: NodeId,
   prevLogIndex: Int,
   prevLogTerm: Term,
   entries: Vector[Entry],
@@ -211,7 +206,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     }
   }
 
-  private def resendTo(node: Raft.NodeId, data: Meta) = {
+  private def resendTo(node: NodeId, data: Meta) = {
     val message = compileMessage(node, data)
     node ! message
   }
@@ -234,7 +229,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     if (prevIndex == 0) 1
     else lastIndex - prevIndex
 
-  private def writeToLog(sender: Raft.NodeId, rpc: ClientRequest, data: Meta) = {
+  private def writeToLog(sender: NodeId, rpc: ClientRequest, data: Meta) = {
     val ref = InternalClientRef(sender, rpc.cid)
     val entry = Entry(rpc.command, data.term, Some(ref))
     data.leaderAppend(self, Vector(entry))
