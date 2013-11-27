@@ -47,7 +47,6 @@ case object Initialise extends Role
 /* Consensus module */
 class Raft() extends Actor with LoggingFSM[Role, Meta] {
   override def logDepth = 12
-  import InMemoryEntries._
 
   startWith(Initialise, Meta(List()))
 

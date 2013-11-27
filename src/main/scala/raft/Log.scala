@@ -35,18 +35,12 @@ class InMemoryEntries[T](log: Vector[Entry]) extends Entries(log) {
   def persist(entries: Vector[Entry]) = ()
 }
 
-object InMemoryEntries {
-  implicit def canBuildFrom(v: Vector[Entry]) = new InMemoryEntries(v)
-}
-
 case class Log(
     entries: Vector[Entry],
     nextIndex: Map[NodeId, Int],
     matchIndex: Map[NodeId, Int],
     commitIndex: Int = 0,
     lastApplied: Int = 0) {
-
-  import InMemoryEntries._
 
   def decrementNextFor(node: NodeId) =
     copy(nextIndex = nextIndex + (node -> (nextIndex(node) - 1)))
@@ -64,7 +58,6 @@ case class Log(
 }
 
 object Log {
-  import InMemoryEntries._
   def apply(nodes: List[NodeId], entries: Vector[Entry]): Log = {
     val nextIndex = entries.lastIndex + 1
     val nextIndices = (for (n <- nodes) yield (n -> nextIndex)).toMap

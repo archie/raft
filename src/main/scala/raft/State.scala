@@ -35,8 +35,6 @@ case class Meta(
     var nodes: List[NodeId],
     var votes: Votes = Votes()) {
 
-  import InMemoryEntries._
-
   def leaderAppend(ref: ActorRef, e: Vector[Entry]) = {
     val entries = log.entries.append(e)
     log = log.copy(entries = entries)

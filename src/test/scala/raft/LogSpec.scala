@@ -7,8 +7,6 @@ class LogSpec extends WordSpecLike
     with BeforeAndAfterAll
     with BeforeAndAfterEach {
 
-  import InMemoryEntries._ // get implicit conversion in scope
-
   val testEntries = Vector(
     Entry("0", Term(0), Some(InternalClientRef(null, 0))), // 1
     Entry("1", Term(1), Some(InternalClientRef(null, 1))), // 2
