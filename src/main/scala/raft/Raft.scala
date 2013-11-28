@@ -64,9 +64,13 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
           stay using (updData) replying (msg)
       }
     case Event(rpc: AppendEntries, data) =>
+      data.setLeader(rpc.leaderId)
       resetTimer
       val (msg, upd) = append(rpc, data)
       stay using upd replying msg
+    case Event(rpc: ClientRequest, data) =>
+      forwardRequest(rpc, data)
+      stay
     case Event(Timeout, data) =>
       goto(Candidate) using preparedForCandidate(data)
   }
@@ -89,8 +93,13 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
     // other   
     case Event(rpc: AppendEntries, data: Meta) =>
+      // TODO: optimisation? become follower only if term is higher?
+      data.setLeader(rpc.leaderId)
       val (msg, upd) = append(rpc, data)
       goto(Follower) using preparedForFollower(data) replying msg
+    case Event(rpc: ClientRequest, data) =>
+      forwardRequest(rpc, data)
+      stay
     case Event(Timeout, data: Meta) =>
       goto(Candidate) using preparedForCandidate(data)
   }
@@ -175,6 +184,13 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   /*
    *  --- Internals ---
    */
+
+  private def forwardRequest(rpc: ClientRequest, data: Meta) = {
+    data.leader match {
+      case Some(target) => target forward rpc
+      case None => // TODO: should it drop the message?
+    }
+  }
 
   private def applyEntries(data: Meta) =
     for (i <- data.log.lastApplied until data.log.commitIndex) {

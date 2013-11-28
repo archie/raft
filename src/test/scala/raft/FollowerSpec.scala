@@ -284,5 +284,12 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       follower.stateName must be(Follower)
       follower.stateData.term.current must be(3)
     }
+
+    "set leader when receiving append entries" in {
+      follower.setState(Follower, default)
+      follower ! AppendEntries(Term(3), testActor, 2, Term(2),
+        Vector(Entry("op", Term(3))), 0)
+      follower.stateData.leader must be(Some(testActor))
+    }
   }
 }

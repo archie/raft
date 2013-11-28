@@ -110,5 +110,18 @@ class CandidateSpec extends RaftSpec with BeforeAndAfterEach {
       candidate.stateName must be(Candidate)
       candidate.stateData.term.current must be(4) // since initial was 3
     }
+
+    "set leader when receiving append entries" in {
+      candidate.setState(Follower, initialCandidateState)
+      candidate ! AppendEntries(
+        term = Term(4),
+        leaderId = testActor,
+        prevLogIndex = 3,
+        prevLogTerm = Term(2),
+        entries = Vector(Entry("op", Term(2))),
+        leaderCommit = 0
+      )
+      candidate.stateData.leader must be(Some(testActor))
+    }
   }
 }
