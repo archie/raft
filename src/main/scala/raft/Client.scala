@@ -19,7 +19,7 @@ trait RaftClient {
     cid
   }
 
-  def raftMember = system.actorSelection("/member*").resolveOne
+  def raftMember = system.actorSelection("/user/member*").resolveOne
 
   def decide(command: String): Future[Int] =
     for {

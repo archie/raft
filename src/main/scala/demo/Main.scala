@@ -20,6 +20,7 @@ class Sequencer extends Actor with RaftClient with ActorLogging {
 
   def receive = {
     case "sequence" =>
+      log.info("Requesting sequence number")
       log.info(s"Got: $sequence at $time")
       schedule
   }
