@@ -111,14 +111,13 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       sendEntries(data)
       stay using data
     case Event(rpc: AppendSuccess, data: Meta) =>
-      data.log = data.log.resetNextFor(sender)
+      data.log = data.log.resetNextFor(sender) // TODO: work on this
       data.log = data.log.matchFor(sender, Some(rpc.index))
       commitEntries(rpc, data)
       applyEntries(data)
       stay
     case Event(rpc: AppendFailure, data: Meta) =>
       if (rpc.term <= data.term) {
-        log.debug(s"Decrementing and resending entries to follower: $sender")
         data.log = data.log.decrementNextFor(sender)
         resendTo(sender, data)
         stay
@@ -141,6 +140,13 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       resetTimer
     case Candidate -> Follower => resetTimer
     case Initialise -> Follower => resetTimer
+  }
+
+  onTermination {
+    case StopEvent(FSM.Failure(cause), state, data) =>
+      val lastEvents = getLog.mkString("\n\t")
+      log.warning(s"Failure in state $state with data $data due to $cause" +
+        "Events leading up to this: \n\t$lastEvents")
   }
 
   private def preparedForFollower(state: Meta): Meta = {
@@ -224,6 +230,8 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def resendTo(node: NodeId, data: Meta) = {
     val message = compileMessage(node, data)
+    log.info(s"\nResending ${message.entries.length} entries " +
+      "(last: ${message.entries.last})to follower: $node\n")
     node ! message
   }
 
