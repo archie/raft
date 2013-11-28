@@ -103,7 +103,6 @@ class RaftIntegrationSpec extends RaftSpec with BeforeAndAfterEach {
     }
 
     "forward client requests to the cluster leader" in {
-      pending
       Thread.sleep(500)
       val client = TestProbe()
       val request = ClientRequest(100, "test")

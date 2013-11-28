@@ -291,5 +291,14 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
         Vector(Entry("op", Term(3))), 0)
       follower.stateData.leader must be(Some(testActor))
     }
+
+    "forward client requests to leader" in {
+      val probe = TestProbe()
+      val withLeader = default.copy(leader = Some(probe.ref))
+      follower.setState(Follower, withLeader)
+      val request = ClientRequest(100, "get")
+      follower ! request
+      probe.expectMsg(request)
+    }
   }
 }
