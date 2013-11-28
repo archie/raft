@@ -5,6 +5,8 @@ import akka.actor.{ Actor, ActorRef, FSM, LoggingFSM }
 import scala.concurrent.duration._
 import scala.concurrent.Promise
 import math.random
+import akka.actor.ActorSystem
+import akka.actor.Props
 
 /* messages */
 sealed trait Message
@@ -12,12 +14,11 @@ case object Timeout extends Message
 case object Heartbeat extends Message
 case class Init(nodes: List[NodeId]) extends Message
 
-sealed trait Request extends Message
 case class RequestVote(
   term: Term,
   candidateId: NodeId,
   lastLogIndex: Int,
-  lastLogTerm: Term) extends Request
+  lastLogTerm: Term) extends Message
 
 case class AppendEntries(
   term: Term,
@@ -25,7 +26,7 @@ case class AppendEntries(
   prevLogIndex: Int,
   prevLogTerm: Term,
   entries: Vector[Entry],
-  leaderCommit: Int) extends Request
+  leaderCommit: Int) extends Message
 
 sealed trait Vote extends Message
 case class DenyVote(term: Term) extends Vote
@@ -309,5 +310,15 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   private def alreadyVoted(data: Meta): Boolean = data.votes.votedFor match {
     case Some(_) => true
     case None => false
+  }
+}
+
+object Raft {
+  def apply(size: Int)(implicit system: ActorSystem): List[NodeId] = {
+    val members = for (i <- List.range(0, size))
+      yield system.actorOf(Props[Raft], "member" + i)
+
+    members.foreach(m => m ! Init(members))
+    members
   }
 }

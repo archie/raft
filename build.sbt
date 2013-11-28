@@ -2,6 +2,8 @@ name := "Raft"
 
 version := "0.1"
 
+mainClass := Some("demo.Main")
+
 scalaVersion := "2.10.2"
 
 libraryDependencies ++= Seq(

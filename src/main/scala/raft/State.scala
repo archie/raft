@@ -33,7 +33,8 @@ case class Meta(
     var log: Log,
     rsm: TotalOrdering, // TODO: Make generic
     var nodes: List[NodeId],
-    var votes: Votes = Votes()) {
+    var votes: Votes = Votes(),
+    var leader: Option[NodeId] = None) {
 
   def leaderAppend(ref: ActorRef, e: Vector[Entry]) = {
     val entries = log.entries.append(e)
@@ -50,6 +51,9 @@ case class Meta(
 
   def nextTerm =
     term = term.nextTerm
+
+  def setLeader(ref: NodeId) =
+    leader = Some(ref)
 }
 
 object Meta {
