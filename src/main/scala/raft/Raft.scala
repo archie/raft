@@ -107,17 +107,21 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   when(Leader) {
     case Event(clientRpc: ClientRequest, data: Meta) =>
+      //log.info(s"\nExecuting request\n\t$data")
       writeToLog(sender, clientRpc, data)
       sendEntries(data)
+      log.info(s"\nExecuted request\n\t$data")
       stay using data
     case Event(rpc: AppendSuccess, data: Meta) =>
+      //log.info(s"\nAppend success from $sender: $rpc \n\t$data")
       data.log = data.log.resetNextFor(sender) // TODO: work on this
       data.log = data.log.matchFor(sender, Some(rpc.index))
-      commitEntries(rpc, data)
+      leaderCommitEntries(rpc, data)
       applyEntries(data)
       stay
     case Event(rpc: AppendFailure, data: Meta) =>
       if (rpc.term <= data.term) {
+        log.info(s"\nAppend failure from $sender: $rpc \n\t$data")
         data.log = data.log.decrementNextFor(sender)
         resendTo(sender, data)
         stay
@@ -211,7 +215,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       }
     }
 
-  private def commitEntries(rpc: AppendSuccess, data: Meta) = {
+  private def leaderCommitEntries(rpc: AppendSuccess, data: Meta) = {
     if (rpc.index >= data.log.commitIndex &&
       data.log.entries.termOf(rpc.index) == data.term) {
       val matches = data.log.matchIndex.count(_._2 == rpc.index)
@@ -230,8 +234,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def resendTo(node: NodeId, data: Meta) = {
     val message = compileMessage(node, data)
-    log.info(s"\nResending ${message.entries.length} entries " +
-      "(last: ${message.entries.last})to follower: $node\n")
+    log.info(s"\n\t\tResending $message entries to follower: $node\n")
     node ! message
   }
 
@@ -282,9 +285,18 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def appendSuccess(rpc: AppendEntries, data: Meta) = {
     data.append(rpc.entries, rpc.prevLogIndex)
+    data.log = data.log.commit(rpc.leaderCommit)
+    followerApplyEntries(data)
     data.selectTerm(rpc.term)
     (AppendSuccess(data.term, data.log.entries.lastIndex), data)
   }
+
+  private def followerApplyEntries(data: Meta) =
+    for (i <- data.log.lastApplied until data.log.commitIndex) {
+      val entry = data.log.entries(i)
+      data.rsm.execute(Get) // TODO: make generic
+      data.log = data.log.applied
+    }
 
   /*
    * Determine whether to grant or deny vote

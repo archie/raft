@@ -163,6 +163,23 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       follower.stateData.log.entries.last must be(Entry("op2", Term(3)))
     }
 
+    "apply committed entries" in {
+      follower.setState(Follower, default)
+      follower.stateData.log.lastApplied must be(0)
+      val probe = TestProbe()
+      probe.send(follower, AppendEntries(
+        term = Term(3),
+        leaderId = testActor,
+        prevLogIndex = 2, // matches follower's last entry
+        prevLogTerm = Term(2), // matches follower's last entry's term
+        entries = Vector(Entry("op", Term(3))),
+        leaderCommit = 2 // safe to commit and apply log entry 1 and 2
+      ))
+      follower.stateData.log.lastApplied must be(2)
+    }
+
+    /* ---------- VOTING -----------*/
+
     "grant vote if candidate term is higher to own term" in {
       follower.setState(Follower, default)
       follower ! RequestVote(Term(3), testActor, 2, Term(2))
