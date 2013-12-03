@@ -9,29 +9,33 @@ import scala.concurrent.duration._
 import java.util.Calendar
 import scala.language.postfixOps
 import raft._
+import scala.util.Success
+import scala.util.Failure
 
 class Sequencer extends Actor with RaftClient with ActorLogging {
   import context._
 
-  def schedule = system.scheduler.scheduleOnce(1000 millis, self, "sequence")
+  def schedule = system.scheduler.scheduleOnce(500 millis, self, "sequence")
 
   override def preStart() = schedule
   override def postRestart(reason: Throwable) = {}
 
   def receive = {
     case "sequence" =>
-      log.info("Requesting sequence number")
-      log.info(s"Got: $sequence at $time")
+      decide("get") onComplete {
+        case Success(x) => log.info(s"Got $x at $time")
+        case Failure(t) => throw t
+      }
+      //system.scheduler.scheduleOnce(200 millis)(system.shutdown)
       schedule
   }
 
-  def sequence: Int = Await.result(decide("get"), 2 seconds)
   def time = Calendar.getInstance().getTime()
 }
 
 object Main extends App {
   implicit val system = ActorSystem("raft")
-  val members = Raft(5)
+  val members = Raft(3)
   val client = system.actorOf(Props[Sequencer], "client")
 
   println("Running raft demo - press enter key to exit")

@@ -94,7 +94,6 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
     // other   
     case Event(rpc: AppendEntries, data: Meta) =>
-      // TODO: optimisation? become follower only if term is higher?
       data.setLeader(rpc.leaderId)
       val (msg, upd) = append(rpc, data)
       goto(Follower) using preparedForFollower(data) replying msg
@@ -110,7 +109,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       //log.info(s"\nExecuting request\n\t$data")
       writeToLog(sender, clientRpc, data)
       sendEntries(data)
-      log.info(s"\nExecuted request\n\t$data")
+      //      log.info(s"\nExecuted request\n\t$data")
       stay using data
     case Event(rpc: AppendSuccess, data: Meta) =>
       //log.info(s"\nAppend success from $sender: $rpc \n\t$data")
@@ -199,7 +198,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   private def forwardRequest(rpc: ClientRequest, data: Meta) = {
     data.leader match {
       case Some(target) => target forward rpc
-      case None => // TODO: should it drop the message?
+      case None => // drops message, relies on client to retry
     }
   }
 

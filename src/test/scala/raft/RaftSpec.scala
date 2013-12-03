@@ -111,5 +111,71 @@ class RaftIntegrationSpec extends RaftSpec with BeforeAndAfterEach {
       client.expectMsg((100, 1))
     }
 
+    "in stable state contain exactly the same log entries, commitIndex and lastApplied" in {
+      Thread.sleep(500)
+      val client = TestProbe()
+      val request = ClientRequest(300, "test")
+      client.send(cluster.head, request)
+      Thread.sleep(500)
+      val leaderTerm = cluster.filter(_.stateName == Leader).head.stateData.term
+      cluster.foreach { n =>
+        n.stateData.log.lastApplied must be(1)
+        n.stateData.log.commitIndex must be(1)
+        n.stateData.log.entries.last must be(
+          Entry(
+            command = "test",
+            term = leaderTerm,
+            client = Some(InternalClientRef(client.ref, 300))))
+      }
+    }
+
+    "bring a follower up to date if log is behind" in {
+      // start cluster
+      // make two appends
+      Thread.sleep(500)
+      val client = TestProbe()
+      val request = ClientRequest(300, "test")
+      val request2 = ClientRequest(400, "test2")
+      client.send(cluster.head, request)
+      client.send(cluster.head, request2)
+
+      // set one follower behind by removing one entry in log
+      Thread.sleep(500)
+      val leaderTerm = cluster.filter(_.stateName == Leader).head.stateData.term
+      val follower = cluster.filter(_.stateName == Follower).head
+      val newLog = follower.stateData.log.copy(entries = Vector(Entry(
+        command = "test",
+        term = leaderTerm,
+        client = Some(InternalClientRef(client.ref, 300)))))
+      follower.stateData.log = newLog
+
+      // make a new append
+      val request3 = ClientRequest(500, "test3")
+      client.send(cluster.head, request3)
+
+      // ensure all are in the same state 
+      Thread.sleep(500)
+      cluster.foreach { n =>
+        n.stateData.log.lastApplied must be(3)
+        n.stateData.log.commitIndex must be(3)
+        n.stateData.log.entries must contain(
+          Entry(
+            command = "test",
+            term = leaderTerm,
+            client = Some(InternalClientRef(client.ref, 300))))
+        n.stateData.log.entries must contain(
+          Entry(
+            command = "test2",
+            term = leaderTerm,
+            client = Some(InternalClientRef(client.ref, 400))))
+        n.stateData.log.entries.last must be(
+          Entry(
+            command = "test3",
+            term = leaderTerm,
+            client = Some(InternalClientRef(client.ref, 500))))
+      }
+
+    }
+
   }
 }
