@@ -38,7 +38,7 @@ class RaftIntegrationSpec extends RaftSpec with BeforeAndAfterEach {
       Thread.sleep(500)
       val firstLeader = cluster.filter(_.stateName == Leader).head
       firstLeader.stop // kill leader
-      Thread.sleep(2000) // new leader amongst remaining should be elected
+      Thread.sleep(1000) // new leader amongst remaining should be elected
       val newLeader = cluster.filter(n => !n.isTerminated && n.stateName == Leader)
       newLeader.length must be(1)
       newLeader.head must not be (firstLeader)

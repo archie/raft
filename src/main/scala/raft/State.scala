@@ -46,11 +46,18 @@ case class Meta(
   def append(e: Vector[Entry], at: Int) =
     log = log.copy(entries = log.entries.append(e, at))
 
-  def selectTerm(other: Term) =
-    term = Term.max(this.term, other)
+  def selectTerm(other: Term) = {
+    if (other > term) {
+      term = other
+      votes = Votes()
+    }
+  }
+  //    term = Term.max(this.term, other)
 
-  def nextTerm =
+  def nextTerm = {
+    votes = Votes()
     term = term.nextTerm
+  }
 
   def setLeader(ref: NodeId) =
     leader = Some(ref)

@@ -61,7 +61,7 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
           entries = Vector(Entry("op", Term(3))),
           leaderCommit = 0
         )
-        expectMsg(AppendFailure(Term(2))) // TODO: needs to include jump back info
+        expectMsg(AppendFailure(Term(3))) // TODO: needs to include jump back info
       }
 
     "remove uncommitted entries if appending at a position " +
@@ -235,11 +235,11 @@ class FollowerSpec extends RaftSpec with BeforeAndAfterEach {
       expectMsg(DenyVote(Term(2)))
     }
 
-    "deny vote if vote for term already cast" in {
+    "deny vote if vote for term already cast in same term" in {
       val voted = default.copy(votes = default.votes.vote(probe.ref))
       follower.setState(Follower, voted)
-      follower ! RequestVote(Term(3), testActor, 2, Term(2))
-      expectMsg(DenyVote(Term(3)))
+      follower ! RequestVote(Term(2), testActor, 2, Term(2))
+      expectMsg(DenyVote(Term(2)))
     }
 
     "convert to candidate if no messages are received within timeout" in {

@@ -67,8 +67,8 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     case Event(rpc: AppendEntries, data) =>
       data.setLeader(rpc.leaderId)
       resetTimer
-      val (msg, upd) = append(rpc, data)
-      stay using upd replying msg
+      val msg = append(rpc, data)
+      stay using data replying msg
     case Event(rpc: ClientRequest, data) =>
       forwardRequest(rpc, data)
       stay
@@ -84,18 +84,15 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
         goto(Leader) using preparedForLeader(data)
       else stay using data
     case Event(DenyVote(term), data: Meta) =>
-      if (term > data.term)
+      if (term > data.term) {
+        data.selectTerm(term)
         goto(Follower) using preparedForFollower(data)
-      else stay
-
-    case Event(rpc: RequestVote, data) if (rpc.term == data.term) =>
-      val (msg, upd) = grant(rpc, data)
-      stay using (upd) replying msg
+      } else stay
 
     // other   
     case Event(rpc: AppendEntries, data: Meta) =>
       data.setLeader(rpc.leaderId)
-      val (msg, upd) = append(rpc, data)
+      val msg = append(rpc, data)
       goto(Follower) using preparedForFollower(data) replying msg
     case Event(rpc: ClientRequest, data) =>
       forwardRequest(rpc, data)
@@ -106,23 +103,19 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   when(Leader) {
     case Event(clientRpc: ClientRequest, data: Meta) =>
-      //log.info(s"\nExecuting request\n\t$data")
       writeToLog(sender, clientRpc, data)
       sendEntries(data)
-      //      log.info(s"\nExecuted request\n\t$data")
       stay using data
     case Event(rpc: AppendSuccess, data: Meta) =>
-      //log.info(s"\nAppend success from $sender: $rpc \n\t$data")
-      data.log = data.log.resetNextFor(sender) // TODO: work on this
+      data.log = data.log.resetNextFor(sender)
       data.log = data.log.matchFor(sender, Some(rpc.index))
       leaderCommitEntries(rpc, data)
       applyEntries(data)
       stay
     case Event(rpc: AppendFailure, data: Meta) =>
       if (rpc.term <= data.term) {
-        log.info(s"\nAppend failure from $sender: $rpc \n\t$data")
         data.log = data.log.decrementNextFor(sender)
-        resendTo(sender, data)
+        //resendTo(sender, data) // let heartbeats do the catch up work
         stay
       } else {
         data.term = rpc.term
@@ -159,7 +152,8 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def preparedForCandidate(data: Meta): Meta = {
     data.nextTerm
-    data.nodes.map { t =>
+    data.votes = Votes(votedFor = Some(self), received = List(self))
+    data.nodes.filter(_ != self).map { t =>
       t ! RequestVote(
         term = data.term,
         candidateId = self,
@@ -171,6 +165,10 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   }
 
   private def preparedForLeader(state: Meta) = {
+    log.info(s"Elected to leader for term: ${state.term}")
+    val nexts = state.log.nextIndex.map(x => (x._1, state.log.entries.lastIndex + 1))
+    val matches = state.log.matchIndex.map(x => (x._1, 0))
+    state.log = state.log.copy(nextIndex = nexts, matchIndex = matches)
     sendEntries(state)
     state
   }
@@ -233,7 +231,6 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
 
   private def resendTo(node: NodeId, data: Meta) = {
     val message = compileMessage(node, data)
-    log.info(s"\n\t\tResending $message entries to follower: $node\n")
     node ! message
   }
 
@@ -264,9 +261,9 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
   /*
    * AppendEntries handling 
    */
-  private def append(rpc: AppendEntries, data: Meta): (AppendReply, Meta) = {
-    if (leaderIsBehind(rpc, data)) appendFail(data)
-    else if (!hasMatchingLogEntryAtPrevPosition(rpc, data)) appendFail(data)
+  private def append(rpc: AppendEntries, data: Meta): AppendReply = {
+    if (leaderIsBehind(rpc, data)) appendFail(rpc, data)
+    else if (!hasMatchingLogEntryAtPrevPosition(rpc, data)) appendFail(rpc, data)
     else appendSuccess(rpc, data)
   }
 
@@ -279,15 +276,17 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
       (data.log.entries.hasEntryAt(rpc.prevLogIndex) &&
         (data.log.entries.termOf(rpc.prevLogIndex) == rpc.prevLogTerm)))
 
-  private def appendFail(data: Meta) =
-    (AppendFailure(data.term), data)
+  private def appendFail(rpc: AppendEntries, data: Meta) = {
+    data.selectTerm(rpc.term)
+    AppendFailure(data.term)
+  }
 
   private def appendSuccess(rpc: AppendEntries, data: Meta) = {
     data.append(rpc.entries, rpc.prevLogIndex)
     data.log = data.log.commit(rpc.leaderCommit)
     followerApplyEntries(data)
     data.selectTerm(rpc.term)
-    (AppendSuccess(data.term, data.log.entries.lastIndex), data)
+    AppendSuccess(data.term, data.log.entries.lastIndex)
   }
 
   private def followerApplyEntries(data: Meta) =
@@ -301,7 +300,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
    * Determine whether to grant or deny vote
    */
   private def vote(rpc: RequestVote, data: Meta): (Vote, Meta) =
-    if (alreadyVoted(data)) deny(rpc, data)
+    if (alreadyVoted(rpc, data)) deny(rpc, data)
     else if (rpc.term < data.term) deny(rpc, data)
     else if (rpc.term == data.term)
       if (candidateLogTermIsBehind(rpc, data)) deny(rpc, data)
@@ -313,6 +312,7 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     data.term = Term.max(data.term, rpc.term)
     (DenyVote(data.term), data)
   }
+
   private def grant(rpc: RequestVote, data: Meta): (Vote, Meta) = {
     data.votes = data.votes.vote(rpc.candidateId)
     data.term = Term.max(data.term, rpc.term)
@@ -326,10 +326,12 @@ class Raft() extends Actor with LoggingFSM[Role, Meta] {
     (data.log.entries.last.term == rpc.lastLogTerm) &&
       (data.log.entries.length - 1 > rpc.lastLogIndex)
 
-  private def alreadyVoted(data: Meta): Boolean = data.votes.votedFor match {
-    case Some(_) => true
-    case None => false
-  }
+  private def alreadyVoted(rpc: RequestVote, data: Meta): Boolean =
+    data.votes.votedFor match {
+      case Some(_) if rpc.term == data.term => true
+      case Some(_) if rpc.term > data.term => false
+      case None => false
+    }
 }
 
 object Raft {
